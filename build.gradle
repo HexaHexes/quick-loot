@@ -171,14 +171,24 @@ tasks.register('prepareGametestMods', Sync) {
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {
     dependsOn 'prepareGametestMods'
 
-    // GameTests are stateless: party/team data left in the world by a prior
-    // run (FTB Teams syncs every stored team at login) breaks the next run's
-    // mock joins, so each run starts from a clean world. Configs persist.
+    // Keep the world, drop only party/team state: stale FTB Teams or Better
+    // Party data from a prior run breaks the next run's mock joins, but the
+    // world seed (and the structure chunks vanilla force-loads) persist, so
+    // local reruns keep the same grid position instead of gambling on a new
+    // random one each time.
     doFirst {
-        delete 'run/world'
+        delete 'run/world/ftbteams'
+        delete 'run/world/data/better_party_parties.dat'
     }
 
-    def expectedTests = 14
+    // Vanilla places test structures at a random far position and a test only
+    // starts once every structure chunk is entity-ticking; on a first run at
+    // an unlucky position that can stall forever (chunk-gated tests never
+    // reach their timeout). Fail fast instead of hanging for hours - rerun
+    // with a fresh world (delete run/world) to roll a new position.
+    timeout = java.time.Duration.ofMinutes(10)
+
+    def expectedTests = 20
     doLast {
         def log = file('run/logs/latest.log')
         if (!log.exists()) {

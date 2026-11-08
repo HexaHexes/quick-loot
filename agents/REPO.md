@@ -27,7 +27,8 @@ for everything that lands, including every wallet insert.
   import their packages.
 
 **Test:** `./gradlew runGameTestServer` — `QuickLootGameTests` +
-`LightmansCurrencyGameTests` (14 tests). `expectedTests = 14` in `build.gradle`
+`LightmansCurrencyGameTests` + `SophisticatedBackpackGameTests` (20 tests).
+`expectedTests = 20` in `build.gradle`
 must match the `@GameTest` count. JUnit (`src/test`) covers the pure party
 matrix; GameTests cover everything that needs a live server.
 
@@ -44,11 +45,15 @@ matrix; GameTests cover everything that needs a live server.
   (killed entity, killer UUID). Do not clear it on read; a killer mismatch must
   resolve fresh.
 - **Single insert funnel**: every path (mob drops, block drops, party shares,
-  quick-deposit, wallet routing) goes through `DropInserter.insert`. Backpack
-  inserts must stay on `getInventoryForInputOutput()` so filters/void/slot-blockers
-  apply. The `insertedOut` baseline is taken *after* the wallet stage: the routed
-  portion is never self-notified — `WalletCoinObserver` owns wallet toasts, which
-  is what makes double-toasts impossible.
+  quick-deposit, wallet routing) goes through `DropInserter.insert` in wallet →
+  backpack → inventory order. The backpack stage is Sophisticated Backpacks'
+  own `InventoryHelper.runPickupOnPickupResponseUpgrades` chain (issue #7):
+  only a Pickup / Advanced Pickup / Magnet / Advanced Magnet upgrade claims
+  anything, its filter and settings decide, and the old
+  `getInventoryForInputOutput()` overflow path is gone (it superseded #1's
+  overflow clause). The `insertedOut` baseline is taken *after* the wallet
+  stage: the routed portion is never self-notified - `WalletCoinObserver`
+  owns wallet toasts, which is what makes double-toasts impossible.
 - **Observer invariants** (issue #4): value-based (Σ `MoneyValue.getCoreValue`),
   never slot-based — `WalletItem.PickupCoin` auto-exchanges and re-sorts slots.
   Baseline fingerprint is the equipped wallet's *identity* (`==`, never `equals` —
@@ -81,8 +86,16 @@ matrix; GameTests cover everything that needs a live server.
   username-limited codecs), `run/world` is wiped before every run (persisted
   parties/teams from a prior run break the next run's joins), and
   `GameTestServerFixes` (gametest source only, never jarred) installs the profile
-  cache vanilla's `GameTestServer` omits — OPaC dereferences it at server-about-to
+  cache vanilla's `GameTestServer` omits - OPaC dereferences it at server-about-to
   -start.
+- **GameTest runs are capped at 10 minutes.** Vanilla places the structure grid
+  at a random far position and a test only starts once every structure chunk is
+  entity-ticking; a first run at an unlucky position can stall forever (those
+  tests never reach their timeout), so the task fails fast instead of hanging.
+  Rerun, or delete `run/world` to roll a new position. A kept world keeps its
+  seed, grid position and force-loaded chunks, so local reruns are stable;
+  only party/team state is wiped between runs (stale FTB Teams data breaks the
+  next run's mock joins).
 - **LC pin**: CurseMaven `lightmans-currency-472521:9048585` (= 1.21-2.3.0.6) is
   both the `compileOnly` and the `gametestMods` pin; mods.toml's optional range
   floor must move with it. FTB Library uses project `ftb-library-forge-404465`
