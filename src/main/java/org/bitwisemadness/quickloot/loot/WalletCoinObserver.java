@@ -20,7 +20,7 @@ import org.bitwisemadness.quickloot.net.InsertNotifier;
  * The single source of Loot Journal pickup toasts for currency that lands in a
  * Lightman's Currency wallet.
  *
- * <p>Every server-side wallet mutation - Quick Loot's own inserts, LC's
+ * <p>Every server-side wallet mutation - our own inserts, LC's
  * auto-pickup divert (which clears the item entity and suppresses the vanilla
  * take-packet, so Loot Journal would otherwise stay silent), LC's
  * {@code giveItemToPlayer} intercept, wallet enchantments, wallet-screen

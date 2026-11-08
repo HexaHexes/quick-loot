@@ -11,7 +11,7 @@ import org.bitwisemadness.quickloot.compat.LightmansCurrencyIntegration;
 import org.bitwisemadness.quickloot.config.QuickLootConfig;
 
 /**
- * The single insertion chain every Quick Loot path flows through: the wallet
+ * The single insertion chain every Quick: Loot! path flows through: the wallet
  * for Lightman's Currency coins, then the 36 main inventory slots (merge into
  * existing stacks first, then empty slots - pickup semantics), then carried
  * backpacks when enabled. Whatever remains is returned for the caller to

@@ -52,7 +52,7 @@ public final class QuickLootConfig {
         private Server(ModConfigSpec.Builder builder) {
             builder.push("drops");
             enabled = builder.comment(
-                    "Master switch for all Quick Loot behaviour.")
+                    "Master switch for all Quick: Loot! behaviour.")
                     .define("enabled", true);
             mobDrops = builder.comment(
                     "Insert mob death drops into the killing player's inventory instead of spawning them. Mob experience follows the same rules: it is awarded directly to the recipients instead of spawning orbs.")

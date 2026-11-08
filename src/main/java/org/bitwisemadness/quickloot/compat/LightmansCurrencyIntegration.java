@@ -21,7 +21,7 @@ import net.minecraft.world.item.ItemStack;
  *
  * <p>The insert funnel is LC's own {@code WalletHandler.PickupCoins} - the
  * same method LC's auto-pickup divert and its {@code giveItemToPlayer}
- * intercept use - so Quick Loot deposits behave exactly like a wallet pickup,
+ * intercept use - so Quick: Loot! deposits behave exactly like a wallet pickup,
  * curios wallets included. Acceptance is checked with LC's own
  * {@code IsAllowedInCoinContainer} gate first: the underlying
  * {@code TryPutItemStack} would happily stuff non-coins into the wallet's
