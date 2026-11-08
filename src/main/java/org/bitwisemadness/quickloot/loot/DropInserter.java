@@ -12,10 +12,11 @@ import org.bitwisemadness.quickloot.config.QuickLootConfig;
 
 /**
  * The single insertion chain every Quick: Loot! path flows through: the wallet
- * for Lightman's Currency coins, then the 36 main inventory slots (merge into
- * existing stacks first, then empty slots - pickup semantics), then carried
- * backpacks when enabled. Whatever remains is returned for the caller to
- * leave in the world; nothing is ever destroyed.
+ * for Lightman's Currency coins, then the pickup-response chain of carried
+ * Sophisticated Backpacks (their pickup and magnet upgrades claim what their
+ * rules allow), then the 36 main inventory slots (merge into existing stacks
+ * first, then empty slots - pickup semantics). Whatever remains is returned
+ * for the caller to leave in the world; nothing is ever destroyed.
  */
 public final class DropInserter {
 
@@ -31,9 +32,16 @@ public final class DropInserter {
      * {@code coinsToWallet}), so the baseline below counts only what reaches
      * inventories - the routed portion is toasted by
      * {@link WalletCoinObserver}, never here, which keeps wallet toasts to
-     * exactly one sender. What remains of the stack is appended to
-     * {@code insertedOut} as a single stack for pickup notification - one
-     * entry per call, counting only what actually entered inventories.</p>
+     * exactly one sender.</p>
+     *
+     * <p>Backpack second (issue #7): before the inventory sees anything, the
+     * stack runs through each carried backpack's pickup-response chain - the
+     * same path Sophisticated Backpacks runs when the player walks over an
+     * item - so a Pickup, Advanced Pickup, Magnet or Advanced Magnet upgrade
+     * decides what its backpack claims, and a backpack without one of those
+     * upgrades claims nothing. What leaves our hands, backpack claims and
+     * inventory inserts together, is appended to {@code insertedOut} as a
+     * single stack for pickup notification - one entry per call.</p>
      */
     public static ItemStack insert(ServerPlayer player, ItemStack stack, List<ItemStack> insertedOut) {
         if (stack.isEmpty()) {
@@ -44,14 +52,14 @@ public final class DropInserter {
             return ItemStack.EMPTY;
         }
         int original = stack.getCount();
-        ItemStack remaining = ItemHandlerHelper.insertItemStacked(
-                new PlayerMainInvWrapper(player.getInventory()), stack.copy(), false);
-        if (!remaining.isEmpty() && QuickLootConfig.SERVER.useBackpacks.get()
-                && ModList.get().isLoaded("sophisticatedbackpacks")) {
-            remaining = BackpackIntegration.insert(player, remaining);
-        }
+        ItemStack inserted = stack.copy();
+
+        stack = routeToBackpacks(player, stack);
+        ItemStack remaining = stack.isEmpty()
+                ? ItemStack.EMPTY
+                : ItemHandlerHelper.insertItemStacked(
+                        new PlayerMainInvWrapper(player.getInventory()), stack.copy(), false);
         if (remaining.getCount() < original) {
-            ItemStack inserted = stack.copy();
             inserted.setCount(original - remaining.getCount());
             insertedOut.add(inserted);
         }
@@ -60,8 +68,8 @@ public final class DropInserter {
 
     /**
      * The wallet stage: routes an accepted coin stack into the equipped wallet
-     * and returns what is left for the inventory chain. Everything else (and
-     * every stack, when {@code coinsToWallet} is off or Lightman's Currency is
+     * and returns what is left for the chain. Everything else (and every
+     * stack, when {@code coinsToWallet} is off or Lightman's Currency is
      * absent) passes through untouched.
      */
     private static ItemStack routeToWallet(ServerPlayer player, ItemStack stack) {
@@ -70,5 +78,22 @@ public final class DropInserter {
             return stack;
         }
         return LightmansCurrencyIntegration.insertCoins(player, stack);
+    }
+
+    /**
+     * The backpack stage (issue #7): each carried backpack gets the stack
+     * through Sophisticated Backpacks' own pickup-response chain before the
+     * inventory. Only a Pickup, Advanced Pickup, Magnet or Advanced Magnet
+     * upgrade claims anything, with its filter and settings deciding; a
+     * backpack without one of those upgrades passes the stack through. With
+     * {@code useBackpacks} off or Sophisticated Backpacks absent, every stack
+     * passes through untouched.
+     */
+    private static ItemStack routeToBackpacks(ServerPlayer player, ItemStack stack) {
+        if (!QuickLootConfig.SERVER.useBackpacks.get()
+                || !ModList.get().isLoaded("sophisticatedbackpacks")) {
+            return stack;
+        }
+        return BackpackIntegration.runPickupChain(player, stack);
     }
 }

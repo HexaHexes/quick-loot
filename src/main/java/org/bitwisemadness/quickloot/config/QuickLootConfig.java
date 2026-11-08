@@ -61,7 +61,7 @@ public final class QuickLootConfig {
                     "Insert block break drops into the breaking player's inventory. Block experience is awarded directly to the breaker instead of spawning orbs.")
                     .define("blockDrops", true);
             useBackpacks = builder.comment(
-                    "Spill overflow into carried Sophisticated Backpacks through their filtered IO handler, so filter, void, slot-blocker and overflow upgrades all apply.")
+                    "Run inserted loot through the pickup-response chain of carried Sophisticated Backpacks before the inventory: a Pickup, Advanced Pickup, Magnet or Advanced Magnet upgrade decides what its backpack claims (its filter and settings apply), a backpack without one of those upgrades receives nothing, and with this off backpacks are not consulted at all.")
                     .define("useBackpacks", true);
             coinsToWallet = builder.comment(
                     "Route Lightman's Currency coin stacks into the player's equipped wallet before inventory insertion (requires Lightman's Currency; inventory and backpacks remain the fallback when no wallet is equipped or the wallet cannot take the coins).")

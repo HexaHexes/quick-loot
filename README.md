@@ -5,10 +5,10 @@ into your inventory instead of leaving them on the ground. You walk past a kill
 and the loot is already yours, and a mined vein fills your slots while the
 experience bar fills with no orb in sight.
 
-Overflow spills into carried Sophisticated Backpacks, loot containers get a
-one-click deposit button, party kills can be shared or rotated, and with
-Lightman's Currency installed your coins go into the equipped wallet rather
-than clogging the inventory.
+Carried Sophisticated Backpacks can claim loot through their pickup upgrades,
+loot containers get a one-click deposit button, party kills can be shared or
+rotated, and with Lightman's Currency installed your coins go into the
+equipped wallet rather than clogging the inventory.
 
 ## What it does
 
@@ -16,9 +16,13 @@ than clogging the inventory.
   inserted into the killer's or breaker's 36 main slots the moment they would
   have spawned, merging into existing stacks first and then filling empty ones.
   Anything that genuinely does not fit stays in the world.
-- **Backpacks take the overflow.** With Sophisticated Backpacks installed, the
-  remainder continues into your carried backpacks through their filtered insert
-  path, so filter, void, slot-blocker and overflow upgrades all apply.
+- **Backpacks take what their pickup upgrades allow.** With Sophisticated
+  Backpacks installed, loot runs through each carried backpack's pickup chain
+  before your inventory, the same path it takes when you walk over an item. A
+  Pickup, Advanced Pickup, Magnet or Advanced Magnet upgrade decides what its
+  backpack claims (its filter and settings apply), a backpack without one of
+  those upgrades claims nothing, and whatever is left fills your slots and
+  then spills into the world.
 - **Experience comes with the loot.** Mob and block experience is awarded
   directly instead of spawning orbs, using the same rules as picking an orb up,
   mending repairs first and all. Loot Journal still shows the pickup
@@ -90,7 +94,7 @@ The mod runs on its own; each of these is optional and adds a piece:
 
 | | Mod | Why |
 |---|---|---|
-| Optional | [Sophisticated Backpacks](https://www.curseforge.com/minecraft/mc-mods/sophisticated-backpacks) | Overflow spills into carried backpacks through their filtered insert path |
+| Optional | [Sophisticated Backpacks](https://www.curseforge.com/minecraft/mc-mods/sophisticated-backpacks) | Loot routes into carried backpacks through their pickup upgrades |
 | Optional | [Loot Journal](https://www.curseforge.com/minecraft/mc-mods/loot-journal) | Pickup notifications for inserted stacks and experience (client side) |
 | Optional | [Lightman's Currency](https://www.curseforge.com/minecraft/mc-mods/lightmans-currency) | Coins route into the equipped wallet, with a pickup toast for every wallet insert |
 | Optional | [Better Party](https://www.curseforge.com/minecraft/mc-mods/better-party), [Open Parties and Claims](https://modrinth.com/mod/open-parties-and-claims), [FTB Teams](https://www.curseforge.com/minecraft/mc-mods/ftb-teams) | Party membership for shared kill loot (tried in that order under `AUTO`) |
