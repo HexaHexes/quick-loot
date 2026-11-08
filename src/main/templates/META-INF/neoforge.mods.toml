@@ -19,9 +19,6 @@ description = '''${mod_description}'''
 # In-game config editing section of README.md). Any existing texture works.
 configuredBackground = "minecraft:textures/block/stone.png"
 
-[[mixins]]
-config = "${mod_id}.mixins.json"
-
 [[dependencies.${mod_id}]]
 modId = "neoforge"
 type = "required"
@@ -36,6 +33,48 @@ versionRange = "${minecraft_version_range}"
 ordering = "NONE"
 side = "BOTH"
 
-# Add your mod's dependencies below. Use type = "optional" for anything the mod
-# works without, and gate the code that touches it (mixins, registrations) so it
-# no-ops when the dependency is absent.
+# Optional integrations. Each is gated behind ModList.isLoaded in exactly one
+# integration class (Sophisticated Backpacks on the server, Loot Journal on the
+# client, Lightman's Currency on the server, party adapters server-side), so
+# none of them can class-load when the dependency is absent.
+[[dependencies.${mod_id}]]
+modId = "sophisticatedbackpacks"
+type = "optional"
+versionRange = "[3.26,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "loot_journal"
+type = "optional"
+versionRange = "[6.2,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "better_party"
+type = "optional"
+versionRange = "[1.1,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "ftbteams"
+type = "optional"
+versionRange = "[2101.1,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "openpartiesandclaims"
+type = "optional"
+versionRange = "[0.30,)"
+ordering = "AFTER"
+side = "BOTH"
+
+[[dependencies.${mod_id}]]
+modId = "lightmanscurrency"
+type = "optional"
+versionRange = "[1.21-2.3.0.6,)"
+ordering = "AFTER"
+side = "BOTH"

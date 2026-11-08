@@ -1,12 +1,40 @@
-# Example Mod
+# Quick Loot
 
-A short, player-facing pitch goes here: one or two sentences on what the mod adds
-or changes, written for someone deciding whether to install it.
+Mobs' and blocks' loot goes **straight into your inventory** instead of scattering on the
+ground — with overflow spilling into your **Sophisticated Backpacks**, a **quick-insert
+button** on loot containers, **party loot sharing**, experience awarded directly instead
+of spawning orbs, and **Lightman's Currency coins routed into your wallet**.
 
 ## What it does
 
-- Describe the first mechanic in plain terms.
-- Describe the second mechanic in plain terms.
+- **Kill and mine loot lands in your inventory.** Mob death drops and block break drops
+  are inserted into the killer's / breaker's 36 main slots the moment they would have
+  spawned — merge into existing stacks first, then empty slots. Whatever genuinely does
+  not fit stays in the world; nothing is ever lost.
+- **Backpack spill.** With [Sophisticated Backpacks](https://www.curseforge.com/minecraft/mc-mods/sophisticated-backpacks)
+  installed, overflow continues into your carried backpacks through their filtered IO
+  handler, so filter, void, slot-blocker and overflow upgrades all apply.
+- **Experience comes with the loot.** Mob and block experience is awarded directly to the
+  recipients instead of spawning orbs, using the exact same rules as picking an orb up —
+  mending repairs first, and Loot Journal still shows the pickup notification. Gates off
+  (`enabled` / `mobDrops` / `blockDrops`) restore vanilla orbs and drops completely.
+- **Quick-insert button.** Loot containers ([Chest](https://minecraft.wiki/w/Chest),
+  [Shulker Box](https://minecraft.wiki/w/Shulker_Box), [Hopper](https://minecraft.wiki/w/Hopper),
+  [Dispenser](https://minecraft.wiki/w/Dispenser)) get a button that empties them into
+  your inventory in one click. It only appears for containers the server has actually
+  seen loot in (latched across reopens), and only for stacks you already carry — the
+  scope config widens it to any container if you want that.
+- **Party loot.** Kills shared with a party can go to the killing blow (default), rotate
+  one member per kill, or split every kill — either as a full copy per member or divided
+  evenly with remainders to the primary. Block drops and experience are never shared.
+- **Coins go to your wallet.** With [Lightman's Currency](https://www.curseforge.com/minecraft/mc-mods/lightmans-currency)
+  installed, coin stacks on every insert path — mob drops, block drops, party shares and
+  quick-deposit — are credited to your equipped wallet first (server toggle,
+  `drops.coinsToWallet`, default on). Inventory and backpacks remain the fallback when no
+  wallet is worn or the wallet cannot take the coins, so nothing is ever lost. Loot
+  Journal shows a pickup toast for **any** currency entering a wallet during play —
+  Quick Loot's inserts, Lightman's Currency's own auto-pickup, wallet enchantments and
+  wallet-screen deposits alike — exactly once per insert.
 
 ## Dependencies
 
@@ -14,7 +42,28 @@ or changes, written for someone deciding whether to install it.
 |---|---|---|
 | Required | Minecraft | — |
 | Required | NeoForge | — |
-| Optional | Example Library | What breaks or is missing without it |
+| Optional | [Sophisticated Backpacks](https://www.curseforge.com/minecraft/mc-mods/sophisticated-backpacks) | Overflow spills into carried backpacks through their filtered IO handler |
+| Optional | [Loot Journal](https://www.curseforge.com/minecraft/mc-mods/loot-journal) | Pickup notifications for inserted stacks and experience (client side) |
+| Optional | [Lightman's Currency](https://www.curseforge.com/minecraft/mc-mods/lightmans-currency) | Coins route into the equipped wallet, with a pickup toast for every wallet insert |
+| Optional | [Better Party](https://www.curseforge.com/minecraft/mc-mods/better-party), [Open Parties and Claims](https://modrinth.com/mod/open-parties-and-claims), [FTB Teams](https://www.curseforge.com/minecraft/mc-mods/ftb-teams) | Party membership for shared kill loot (tried in that order under `AUTO`) |
+
+Every optional dependency is gated behind `ModList.isLoaded` in exactly one adapter
+class, so the mod works — and never class-loads their code — without them.
+
+## Configuration
+
+SERVER values live in `quick_loot-server.toml`; all of them can be edited in-game (see
+below). Highlights:
+
+| Key | Default | What it does |
+|---|---|---|
+| `drops.enabled` | `true` | Master switch for all Quick Loot behaviour |
+| `drops.mobDrops` / `drops.blockDrops` | `true` | Insert mob / block drops (experience follows the same gates) |
+| `drops.useBackpacks` | `true` | Spill overflow into carried Sophisticated Backpacks |
+| `drops.coinsToWallet` | `true` | Route Lightman's Currency coins into the equipped wallet on every insert path |
+| `drops.lootJournalNotify` | `true` | Send inserted stacks and awarded experience to Loot Journal |
+| `quickDeposit.enabled` / `quickDeposit.scope` | `true` / `LOOT_ONLY` | The quick-insert button and how much of it sees |
+| `party.enabled` / `party.lootRule` / `party.lootAmount` | `true` / `KILLING_BLOW` / `OWNER_ONLY` | Party sharing: who receives, and how much |
 
 ## In-game config editing
 
@@ -25,71 +74,22 @@ mod, press Config, and change values directly: Configured writes through
 NeoForge's config system, so a reload applies the new values without restarting
 the game.
 
-This template pre-wires the config-screen background in
+This mod pre-wires the config-screen background in
 `src/main/templates/META-INF/neoforge.mods.toml`
 (`[modproperties.${mod_id}] configuredBackground`) - point it at any texture you
 like. Note Configured only shows a menu for mods that actually register a
-config: a template-derived mod with no registered settings has nothing to show.
-
-## Using this template
-
-This repository is a **template** for new NeoForge mods in this org. To start a
-mod from it: create a new repository from this template (or copy the folder),
-then work through the **rename checklist** below. Every step is mechanical.
-
-### Rename checklist
-
-The mod's identity is deliberately concentrated so a rename touches a handful of
-known places. Search the repo for each of these before you start.
-
-1. **`gradle.properties`**: set `mod_id`, `mod_name`, `mod_version`,
-   `mod_group_id`, `mod_authors`, `mod_description`. This is the single source
-   of truth: `build.gradle` reads these, and the `neoforge.mods.toml`
-   placeholders are filled from them at build time.
-2. **`settings.gradle`**: set `rootProject.name` to the same value as `mod_id`.
-3. **`build.gradle`**: `archivesName` already reads `mod_id`; leave it unless
-   you want a jar name that differs from the mod id.
-4. **Java package**: move `src/main/java/org/bitwisemadness/examplemod/` and
-   `src/gametest/java/org/bitwisemadness/examplemod/` to your new
-   `mod_group_id` path, and update the `package` declarations.
-5. **`ExampleMod.MOD_ID`**: set the constant to the new `mod_id`. It is the
-   value `@Mod` is annotated with, and it must match `mod_id` exactly.
-6. **Mixins config**: rename `src/main/resources/examplemod.mixins.json` to
-   `<mod_id>.mixins.json`, and set its `package` to your mixin package. The
-   `[[mixins]]` entry in `src/main/templates/META-INF/neoforge.mods.toml`
-   already references it by `${mod_id}.mixins.json`.
-   See [`docs/mixin-rules.md`](docs/mixin-rules.md) for the mixin rules:
-   no inherited-member `@Shadow`s, no refmap, and how to verify client mixins
-   (CI never loads the `client` array).
-7. **GameTest template structure**: if you keep the smoke test, the structure
-   lives at `src/gametest/resources/data/<mod_id>/structure/empty.nbt`; move it
-   under your new mod id. The smoke test's `@GameTest(template = "empty")`
-   resolves it.
-8. **`agents/REPO.md`**: fill in the repo header (repo, mod id, jar name), the
-   description, the dependencies, the test line and the gotchas. Do not edit
-   `agents/AGENTS.md`: it is pulled verbatim from the template repo and only
-   changes there.
-9. **Publishing block in `build.gradle`**: set the GitHub Packages URL in the
-   `publishing` block to this repository
-   (`https://maven.pkg.github.com/HexaHexes/<repo-name>`); the artifactId and the
-   pom metadata already read from `gradle.properties`.
-10. **`NOTICE`**: replace `<project name>` with the mod name and add attribution
-    for anything the mod reads through public APIs or includes. The file is
-    mandatory and must never be deleted.
-
-Search for leftovers before your first build:
-
-```
-examplemod
-Example Mod
-org.bitwisemadness.examplemod
-```
-
-All three should return nothing once the rename is complete.
+config: a mod with no registered settings has nothing to show.
 
 ## Credits
 
 - Built on [NeoForge](https://neoforged.net/).
+- Optional integrations: [Sophisticated Backpacks](https://www.curseforge.com/minecraft/mc-mods/sophisticated-backpacks),
+  [Loot Journal](https://www.curseforge.com/minecraft/mc-mods/loot-journal),
+  [Lightman's Currency](https://www.curseforge.com/minecraft/mc-mods/lightmans-currency),
+  [Better Party](https://www.curseforge.com/minecraft/mc-mods/better-party),
+  [Open Parties and Claims](https://modrinth.com/mod/open-parties-and-claims) and
+  [FTB Teams](https://www.curseforge.com/minecraft/mc-mods/ftb-teams) — all through
+  their public APIs only.
 
 ## License
 

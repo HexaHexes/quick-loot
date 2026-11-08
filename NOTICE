@@ -1,4 +1,4 @@
-<project name>
+Quick Loot
 Copyright (c) 2026 Bitwise Madness
 
 This mod is licensed under the GNU Lesser General Public License v2.1 - see
@@ -11,3 +11,22 @@ without a right to do so.
 - Minecraft is a trademark of Mojang AB. This mod is not affiliated with or
   endorsed by Mojang.
 - NeoForge: https://neoforged.net/
+- Lightman's Currency by Lightman314, Apache License 2.0:
+  https://github.com/Lightman314/LightmansCurrency - optional wallet/coin
+  integration through its public API only; no code is included or modified.
+- Sophisticated Backpacks / Sophisticated Core by P3pp3r1y, All Rights Reserved:
+  https://www.curseforge.com/minecraft/mc-mods/sophisticated-backpacks -
+  optional backpack-overflow integration through its public API only; no code
+  is included or modified.
+- Loot Journal by Obscuria, Obscuria Modding License:
+  https://www.curseforge.com/minecraft/mc-mods/loot-journal - optional pickup
+  notifications through its public API only; no code is included or modified.
+- Better Party, All Rights Reserved:
+  https://www.curseforge.com/minecraft/mc-mods/better-party - optional party
+  membership through its public API only; no code is included or modified.
+- FTB Teams by FTB, All Rights Reserved:
+  https://www.curseforge.com/minecraft/mc-mods/ftb-teams - optional party
+  membership through its public API only; no code is included or modified.
+- Open Parties and Claims by Xaero, GNU Lesser General Public License v3.0:
+  https://modrinth.com/mod/open-parties-and-claims - optional party membership
+  through its public API only; no code is included or modified.
