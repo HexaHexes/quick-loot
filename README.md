@@ -1,6 +1,6 @@
-# Quick Loot
+# Quick: Loot!
 
-Quick Loot puts mob and block drops, and the experience they carry, straight
+Quick: Loot! puts mob and block drops, and the experience they carry, straight
 into your inventory instead of leaving them on the ground. You walk past a kill
 and the loot is already yours, and a mined vein fills your slots while the
 experience bar fills with no orb in sight.
@@ -68,7 +68,7 @@ in-game with Configured installed.
 
 | Key | Default | What it does |
 |---|---|---|
-| `drops.enabled` | `true` | Master switch for all Quick Loot behaviour |
+| `drops.enabled` | `true` | Master switch for all Quick: Loot! behaviour |
 | `drops.mobDrops` / `drops.blockDrops` | `true` | Insert mob and block drops; experience follows the same gates |
 | `drops.useBackpacks` | `true` | Spill overflow into carried Sophisticated Backpacks |
 | `drops.coinsToWallet` | `true` | Route Lightman's Currency coins into the equipped wallet on every insert path |
