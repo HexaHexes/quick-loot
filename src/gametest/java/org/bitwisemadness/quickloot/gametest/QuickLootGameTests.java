@@ -16,9 +16,11 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.inventory.ShulkerBoxMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameRules;
@@ -180,6 +182,60 @@ public final class QuickLootGameTests {
     }
 
     /**
+     * The block item and block experience switches are independent axes too
+     * (issue #13): drops off with XP on awards directly while the list stays
+     * for vanilla, drops on with XP off absorbs while the amount stays, and
+     * both off leaves the event alone.
+     */
+    @GameTest(template = "empty")
+    public static void blockDropAndXpKeysAreIndependent(GameTestHelper helper) {
+        ServerPlayer breaker = TestSupport.join(helper, "xp-blk-keys");
+        var level = helper.getLevel();
+        BlockPos abs = helper.absolutePos(BlockPos.ZERO);
+        var config = QuickLootConfig.SERVER;
+        boolean wasDrops = config.blockDrops.get();
+        boolean wasXp = config.blockExperience.get();
+        try {
+            config.blockDrops.set(false);
+            config.blockExperience.set(true);
+            var xpFirst = blockEvent(level, abs, breaker, 11);
+            DropEvents.handleBlockDrops(xpFirst);
+            TestSupport.check(!xpFirst.isCanceled(), "never canceled");
+            TestSupport.check(!xpFirst.getDrops().isEmpty(),
+                    "blockDrops off: the drop list stays for vanilla");
+            TestSupport.check(xpFirst.getDroppedExperience() == 0,
+                    "blockExperience on: zeroed so popExperience is a no-op");
+            TestSupport.check(breaker.totalExperience == 11,
+                    "blockExperience on: awarded directly to the breaker");
+
+            config.blockDrops.set(true);
+            config.blockExperience.set(false);
+            var dropsFirst = blockEvent(level, abs, breaker, 11);
+            DropEvents.handleBlockDrops(dropsFirst);
+            TestSupport.check(dropsFirst.getDrops().isEmpty(),
+                    "blockDrops on: the drop must be absorbed");
+            TestSupport.check(dropsFirst.getDroppedExperience() == 11,
+                    "blockExperience off: the amount stays for vanilla");
+            TestSupport.check(breaker.totalExperience == 11,
+                    "blockExperience off: no further award");
+
+            config.blockDrops.set(false);
+            config.blockExperience.set(false);
+            var untouched = blockEvent(level, abs, breaker, 11);
+            DropEvents.handleBlockDrops(untouched);
+            TestSupport.check(!untouched.getDrops().isEmpty(),
+                    "both off: the drop list stays for vanilla");
+            TestSupport.check(untouched.getDroppedExperience() == 11,
+                    "both off: the amount stays for vanilla");
+            TestSupport.check(breaker.totalExperience == 11, "both off: no award");
+        } finally {
+            config.blockDrops.set(wasDrops);
+            config.blockExperience.set(wasXp);
+        }
+        helper.succeed();
+    }
+
+    /**
      * The living-drop and living-XP handlers are wired to the real event bus:
      * posting both events for one kill (experience first, as vanilla fires
      * them) awards the XP directly, absorbs the drop, zeroes the orb amount
@@ -206,6 +262,75 @@ public final class QuickLootGameTests {
         TestSupport.check(dropsEvent.getDrops().isEmpty(), "the drop must be absorbed");
         TestSupport.check(TestSupport.countItem(killer, Items.DIAMOND) == 1,
                 "the diamond must land with the killer");
+        helper.succeed();
+    }
+
+    /**
+     * The mob item and mob experience switches are independent axes (issue
+     * #13): items insert while XP stays vanilla, XP awards directly while
+     * items stay vanilla, and with both off neither event is touched.
+     */
+    @GameTest(template = "empty")
+    public static void mobDropAndXpKeysAreIndependent(GameTestHelper helper) {
+        ServerPlayer killer = TestSupport.join(helper, "xp-mob-keys");
+        var config = QuickLootConfig.SERVER;
+        boolean wasDrops = config.mobDrops.get();
+        boolean wasXp = config.mobExperience.get();
+        var victim = helper.makeMockPlayer(GameType.CREATIVE);
+        var level = helper.getLevel();
+        try {
+            config.mobDrops.set(true);
+            config.mobExperience.set(false);
+            var dropsA = new ArrayList<ItemEntity>();
+            dropsA.add(itemAt(level, helper.absolutePos(BlockPos.ZERO), new ItemStack(Items.DIAMOND)));
+            var dropsEventA = new LivingDropsEvent(
+                    victim, level.damageSources().playerAttack(killer), dropsA, true);
+            DropEvents.handleLivingDrops(dropsEventA, null);
+            TestSupport.check(dropsEventA.getDrops().isEmpty(),
+                    "XP off: the item side must still absorb");
+            TestSupport.check(TestSupport.countItem(killer, Items.DIAMOND) == 1,
+                    "XP off: the diamond lands with the killer");
+            var xpEventA = new LivingExperienceDropEvent(victim, killer, 30);
+            DropEvents.handleLivingXpDrop(xpEventA, null);
+            TestSupport.check(!xpEventA.isCanceled(), "never canceled");
+            TestSupport.check(xpEventA.getDroppedExperience() == 30,
+                    "mobExperience off: the orb amount stays for vanilla");
+            TestSupport.check(killer.totalExperience == 0, "mobExperience off: no direct award");
+
+            config.mobDrops.set(false);
+            config.mobExperience.set(true);
+            var dropsB = new ArrayList<ItemEntity>();
+            dropsB.add(itemAt(level, helper.absolutePos(BlockPos.ZERO), new ItemStack(Items.DIAMOND)));
+            var dropsEventB = new LivingDropsEvent(
+                    victim, level.damageSources().playerAttack(killer), dropsB, true);
+            DropEvents.handleLivingDrops(dropsEventB, null);
+            TestSupport.check(dropsEventB.getDrops().size() == 1,
+                    "mobDrops off: the drop list stays for vanilla");
+            var xpEventB = new LivingExperienceDropEvent(victim, killer, 30);
+            DropEvents.handleLivingXpDrop(xpEventB, null);
+            TestSupport.check(xpEventB.getDroppedExperience() == 0,
+                    "mobExperience on: zeroed so the orb spawn is a no-op");
+            TestSupport.check(killer.totalExperience == 30,
+                    "mobExperience on: awarded directly to the killer");
+
+            config.mobDrops.set(false);
+            config.mobExperience.set(false);
+            var dropsC = new ArrayList<ItemEntity>();
+            dropsC.add(itemAt(level, helper.absolutePos(BlockPos.ZERO), new ItemStack(Items.DIAMOND)));
+            var dropsEventC = new LivingDropsEvent(
+                    victim, level.damageSources().playerAttack(killer), dropsC, true);
+            DropEvents.handleLivingDrops(dropsEventC, null);
+            var xpEventC = new LivingExperienceDropEvent(victim, killer, 30);
+            DropEvents.handleLivingXpDrop(xpEventC, null);
+            TestSupport.check(dropsEventC.getDrops().size() == 1,
+                    "both off: the drop list stays for vanilla");
+            TestSupport.check(xpEventC.getDroppedExperience() == 30,
+                    "both off: the orb amount stays for vanilla");
+            TestSupport.check(killer.totalExperience == 30, "both off: no award");
+        } finally {
+            config.mobDrops.set(wasDrops);
+            config.mobExperience.set(wasXp);
+        }
         helper.succeed();
     }
 
@@ -427,6 +552,118 @@ public final class QuickLootGameTests {
             config.quickDeposit.set(wasEnabled);
             config.quickDepositScope.set(wasScope);
             config.useBackpacks.set(wasBackpacks);
+        }
+        helper.succeed();
+    }
+
+    /**
+     * The deposit eligibility rule has its own server key (issue #13): with
+     * {@code quickDeposit.requireCarried} off, a stack the player carries
+     * nowhere still moves; the default keeps the novel stack put.
+     */
+    @GameTest(template = "empty")
+    public static void requireCarriedOffDepositsNovelStacks(GameTestHelper helper) {
+        ServerPlayer player = TestSupport.join(helper, "carry-off");
+        helper.setBlock(BlockPos.ZERO, Blocks.CHEST);
+        ChestBlockEntity chest = helper.getBlockEntity(BlockPos.ZERO);
+        chest.setItem(0, new ItemStack(Items.EMERALD, 16));
+        player.getInventory().items.set(0, new ItemStack(Items.DIAMOND, 5));
+        var menu = ChestMenu.threeRows(100, player.getInventory(), chest);
+
+        var config = QuickLootConfig.SERVER;
+        boolean wasDeposit = config.quickDeposit.get();
+        var wasScope = config.quickDepositScope.get();
+        boolean wasCarried = config.requireCarried.get();
+        boolean wasBackpacks = config.useBackpacks.get();
+        try {
+            config.quickDeposit.set(true);
+            config.quickDepositScope.set(DepositScope.ALL_CONTAINERS);
+            config.useBackpacks.set(false);
+            player.containerMenu = menu;
+
+            QuickDeposit.run(player);
+            TestSupport.check(chest.getItem(0).getCount() == 16,
+                    "requireCarried on: a novel stack must stay");
+            TestSupport.check(TestSupport.countItem(player, Items.EMERALD) == 0,
+                    "requireCarried on: no emeralds may appear");
+
+            config.requireCarried.set(false);
+            QuickDeposit.run(player);
+            TestSupport.check(chest.getItem(0).isEmpty(),
+                    "requireCarried off: the novel stack must move");
+            TestSupport.check(TestSupport.countItem(player, Items.EMERALD) == 16,
+                    "requireCarried off: the emeralds land in the inventory");
+        } finally {
+            config.quickDeposit.set(wasDeposit);
+            config.quickDepositScope.set(wasScope);
+            config.requireCarried.set(wasCarried);
+            config.useBackpacks.set(wasBackpacks);
+        }
+        helper.succeed();
+    }
+
+    /**
+     * The quick-insert menu whitelist is a server config (issue #13): the
+     * list filters {@link MenuWhitelist#containerOf} itself, so a chest is
+     * refused - button gate and server validation alike - while it is off
+     * the list, and a listed shulker menu works throughout. NeoForge syncs
+     * SERVER configs to clients at login, so the button reads the same
+     * values with no whitelist payload of our own.
+     */
+    @GameTest(template = "empty")
+    public static void menuListGatesChestMenus(GameTestHelper helper) {
+        ServerPlayer player = TestSupport.join(helper, "menu-list");
+        helper.setBlock(BlockPos.ZERO, Blocks.CHEST);
+        ChestBlockEntity chest = helper.getBlockEntity(BlockPos.ZERO);
+        chest.setItem(0, new ItemStack(Items.DIAMOND, 10));
+        player.getInventory().items.set(0, new ItemStack(Items.DIAMOND, 20));
+        var chestMenu = ChestMenu.threeRows(100, player.getInventory(), chest);
+
+        var shulkerContents = new SimpleContainer(27);
+        shulkerContents.setItem(0, new ItemStack(Items.DIAMOND, 5));
+        var shulkerMenu = new ShulkerBoxMenu(101, player.getInventory(), shulkerContents);
+
+        var config = QuickLootConfig.SERVER;
+        boolean wasDeposit = config.quickDeposit.get();
+        var wasScope = config.quickDepositScope.get();
+        boolean wasBackpacks = config.useBackpacks.get();
+        var wasMenus = config.quickDepositMenus.get();
+        try {
+            config.quickDeposit.set(true);
+            config.quickDepositScope.set(DepositScope.ALL_CONTAINERS);
+            config.useBackpacks.set(false);
+
+            config.quickDepositMenus.set(List.of("shulker"));
+            TestSupport.check(!MenuWhitelist.isWhitelisted(chestMenu),
+                    "chest off the list: the button gate must refuse");
+            TestSupport.check(MenuWhitelist.isWhitelisted(shulkerMenu),
+                    "shulker on the list: must stay allowed");
+            player.containerMenu = chestMenu;
+            QuickDeposit.run(player);
+            TestSupport.check(chest.getItem(0).getCount() == 10,
+                    "chest off the list: the server must refuse the click");
+
+            config.quickDepositMenus.set(List.of("chest"));
+            TestSupport.check(MenuWhitelist.isWhitelisted(chestMenu),
+                    "chest back on the list: accepted again");
+            QuickDeposit.run(player);
+            TestSupport.check(chest.getItem(0).isEmpty(),
+                    "chest on the list: the deposit must move");
+            TestSupport.check(TestSupport.countItem(player, Items.DIAMOND) == 30,
+                    "20 carried + 10 deposited");
+
+            config.quickDepositMenus.set(List.of("shulker"));
+            player.containerMenu = shulkerMenu;
+            QuickDeposit.run(player);
+            TestSupport.check(shulkerContents.getItem(0).isEmpty(),
+                    "shulker on the list: its contents must move");
+            TestSupport.check(TestSupport.countItem(player, Items.DIAMOND) == 35,
+                    "30 + 5 from the shulker");
+        } finally {
+            config.quickDeposit.set(wasDeposit);
+            config.quickDepositScope.set(wasScope);
+            config.useBackpacks.set(wasBackpacks);
+            config.quickDepositMenus.set(wasMenus);
         }
         helper.succeed();
     }

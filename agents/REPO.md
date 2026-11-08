@@ -27,10 +27,11 @@ for everything that lands, including every wallet insert.
   import their packages.
 
 **Test:** `./gradlew runGameTestServer` — `QuickLootGameTests` +
-`LightmansCurrencyGameTests` + `SophisticatedBackpackGameTests` (23 tests).
-`expectedTests = 23` in `build.gradle`
+`LightmansCurrencyGameTests` + `SophisticatedBackpackGameTests` (28 tests).
+`expectedTests = 28` in `build.gradle`
 must match the `@GameTest` count. JUnit (`src/test`) covers the pure party
-matrix; GameTests cover everything that needs a live server.
+matrix and pure config types; GameTests cover everything that needs a live
+server.
 
 **Gotchas**
 - **Never cancel a drop event** — mutate instead: remove absorbed `ItemEntity`s
@@ -79,10 +80,25 @@ matrix; GameTests cover everything that needs a live server.
   `InsertedPayload` STREAM_CODEC test instead). The GameTest seams are the
   `handleLivingDrops` / `handleLivingXpDrop` / `handleBlockDrops` bridge overloads
   and `WalletCoinObserver.capture`.
-- **Menu whitelist lockstep**: the client button gate and the server's
-  `QuickDeposit.run` validation must both go through `MenuWhitelist.containerOf`
-  (Chest / Shulker / Hopper / Dispenser). Evidence is latched (`LootContainerLatches`)
-  because `getLootTable()` nulls on first open; `ALL_CONTAINERS` is the escape hatch.
+- **Menu whitelist lockstep** (issue #13): the client button gate and the
+  server's `QuickDeposit.run` validation must both go through
+  `MenuWhitelist.containerOf` (Chest / Shulker / Hopper / Dispenser) - never
+  a direct `instanceof` - because the `quickDeposit.menus` config check folds
+  into that one method. NeoForge syncs SERVER configs to the client during
+  login (`net.neoforged.neoforge.network.ConfigSync` reads
+  `ModConfigs.getConfigSet(Type.SERVER)`), so both sides read the same value
+  with no whitelist payload of our own; a modded client on an unmodded server
+  falls back to local defaults, which the server still revalidates. Evidence
+  is a separate latch (`LootContainerLatches`) on top: `getLootTable()` nulls
+  on first open; `ALL_CONTAINERS` is the escape hatch.
+- **One behaviour, one server key** (issue #13): every gameplay axis has its
+  own SERVER-spec key - items (`mobDrops`/`blockDrops`) and XP
+  (`mobExperience`/`blockExperience`) are independent pairs, the LC death-coin
+  scoop is `lightmansCoins` (AND-gated under `mobDrops`, never alone), and
+  deposit has `requireCarried` + `menus`. New behaviour gets a new key with a
+  behaviour-neutral default; never fold one axis into another's toggle. Pure
+  config types (e.g. `DepositMenuKind`) stay free of Minecraft imports so the
+  JUnit suite can pin them.
 - **Party source AUTO order**: Better Party → OPaC → FTB Teams. OPaC's adapter
   prefers owner-then-uuid order; FTB filters to party-type teams only.
 - **GameTest harness** (`src/gametest`): mock players join through the real
