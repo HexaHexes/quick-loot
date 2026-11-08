@@ -70,10 +70,19 @@ server.
   (`WalletItem.getDataWrapper(...).getContents()`) — `WalletHelpers.getWalletContainer`
   is a one-slot container holding the wallet item itself, not its coins.
 - **Payload types**: build `CustomPacketPayload.Type` with
-  `ResourceLocation.fromNamespaceAndPath(MOD_ID, ...)` — `createType(String)` is
+  `ResourceLocation.fromNamespaceAndPath(MOD_ID, ...)` - `createType(String)` is
   minecraft-namespaced and crashes the server at registration (first boot caught
   this). Channel ids: `quick_loot:inserted`, `quick_loot:container_flag`,
   `quick_loot:quick_deposit`.
+- **Channels register optional** (`event.registrar("1").optional()`): a
+  *required* channel makes NeoForge's negotiation disconnect any client that
+  lacks it - vanilla or a modded client without this mod - so required
+  channels would force every player to install Quick: Loot!. Optional
+  channels are disabled for those clients instead (NeoForge's own built-ins
+  register the same way), and clientbound payloads are only ever delivered to
+  clients that negotiated the channel. Clients without the mod get the full
+  gameplay but no button and no Loot Journal toast; never flip this back to
+  required.
 - **Visibility discipline**: helpers stay package-private unless a test seam
   forces otherwise (`XpAwards` is package-private; `LootContainerLatches.load` /
   `forLevel` are deliberately *not* widened — NBT round-trip is covered by the

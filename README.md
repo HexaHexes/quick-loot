@@ -10,6 +10,12 @@ loot containers get a one-click deposit button, party kills can be shared or
 rotated, and with Lightman's Currency installed your coins go into the
 equipped wallet rather than clogging the inventory.
 
+The mod is server-authoritative: players do not need it installed to join or
+to receive any of the gameplay - a server running Quick: Loot! inserts loot,
+awards experience and shares party kills for everyone connected. Only the
+quick-insert button and the Loot Journal pickup notifications need the mod on
+the client.
+
 ## What it does
 
 - **Drops land in your inventory.** Mob death drops and block break drops are
