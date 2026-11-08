@@ -36,6 +36,25 @@ of spawning orbs, and **Lightman's Currency coins routed into your wallet**.
   Quick Loot's inserts, Lightman's Currency's own auto-pickup, wallet enchantments and
   wallet-screen deposits alike — exactly once per insert.
 
+## Party loot
+
+Who receives a kill's loot is the **rule**; how much each recipient gets is the
+**amount**. Both are server config (`party.lootRule`, `party.lootAmount`), and the
+feature is inert at the defaults — the killer keeps everything, exactly like solo play.
+
+| Rule \ Amount | `OWNER_ONLY` (default) | `FULL_TO_ALL` | `SPLIT_EQUALLY` |
+|---|---|---|---|
+| `KILLING_BLOW` (default) — the killer only | killer gets the whole stack | killer gets the whole stack (only one recipient) | killer gets the whole stack (only one recipient) |
+| `ROUND_ROBIN` — one rotating member per kill | the rotated member gets the whole stack | the rotated member gets the whole stack (only one recipient) | the rotated member gets the whole stack (only one recipient) |
+| `FREE_FOR_ALL` — every eligible member | killer (primary) gets the whole stack; the rest get nothing | **every member receives a full copy** of each stack | each stack divided evenly; indivisible remainders go one each in stable order, **primary (killer) first** |
+
+Notes: recipients are limited to party members who are **online and in the killed mob's
+dimension** (round robin rotates past the rest), rotation state persists per party in
+world data, and each recipient's share rides the normal insert chain — inventory,
+then backpacks, with any true remainder spawning at the death site. Block drops and
+block experience are never party-shared. Membership comes from Better Party, Open
+Parties and Claims or FTB Teams (`party.source=AUTO` tries them in that order).
+
 ## Dependencies
 
 | | Mod | Why |
