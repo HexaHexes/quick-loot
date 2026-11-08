@@ -26,7 +26,7 @@ public final class LootJournalClientIntegration {
      * allowed-item and tracking checks before firing the pickup event, giving
      * full behavioural parity with a real pickup; {@code pickupXp} does the
      * same for the experience toast ({@code SHOW_XP_PICKUPS}), matching what
-     * collecting an {@code ExperienceOrb} would show. Since Quick Loot awards
+     * collecting an {@code ExperienceOrb} would show. Since Quick: Loot! awards
      * experience directly (no orb entity exists), no vanilla packet can
      * produce this notification for us.
      */

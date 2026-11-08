@@ -11,7 +11,7 @@ import net.minecraft.world.item.ItemStack;
 import org.bitwisemadness.quickloot.QuickLoot;
 
 /**
- * Server to client: the stacks Quick Loot inserted for this player (and/or the
+ * Server to client: the stacks Quick: Loot! inserted for this player (and/or the
  * experience points it awarded directly), so Loot Journal can raise the same
  * pickup notification a real pickup or orb collection would.
  *
