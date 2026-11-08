@@ -73,12 +73,16 @@ in-game with Configured installed.
 | Key | Default | What it does |
 |---|---|---|
 | `drops.enabled` | `true` | Master switch for all Quick: Loot! behaviour |
-| `drops.mobDrops` / `drops.blockDrops` | `true` | Insert mob and block drops; experience follows the same gates |
+| `drops.mobDrops` / `drops.blockDrops` | `true` | Insert mob and block drops (experience has its own keys below) |
+| `drops.mobExperience` / `drops.blockExperience` | `true` | Award kill and mining experience directly instead of spawning orbs; each independent of its drop key |
+| `drops.lightmansCoins` | `true` | Collect Lightman's Currency coins spawned at a mob's death into the insert pipeline |
 | `drops.useBackpacks` | `true` | Spill overflow into carried Sophisticated Backpacks |
 | `drops.coinsToWallet` | `true` | Route Lightman's Currency coins into the equipped wallet on every insert path |
 | `drops.lootJournalNotify` | `true` | Send inserted stacks and awarded experience to Loot Journal |
 | `quickDeposit.enabled` | `true` | Allow the quick-insert button; the server validates every click |
 | `quickDeposit.scope` | `LOOT_ONLY` | `LOOT_ONLY` shows the button only on containers the server has seen loot in, `ALL_CONTAINERS` on any whitelisted container |
+| `quickDeposit.requireCarried` | `true` | Only deposit a stack the player already carries (inventory or backpack) |
+| `quickDeposit.menus` | `chest, shulker, hopper, dispenser` | Which container screens offer the quick-insert button |
 | `showQuickDepositButton` | `true` | Client-side display of the quick-insert button |
 | `party.enabled` | `true` | Distribute kill loot among party members |
 | `party.source` | `AUTO` | Party membership source; `AUTO` tries Better Party, then Open Parties and Claims, then FTB Teams |

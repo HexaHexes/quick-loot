@@ -28,7 +28,9 @@ import org.bitwisemadness.quickloot.net.InsertNotifier;
  * regardless of the {@code useBackpacks} insert setting, since the gate is
  * about what the player demonstrably carries, not where overflow may spill.
  * Full existing stacks simply result in a fresh stack in an empty slot;
- * ineligible stacks stay put.</p>
+ * ineligible stacks stay put. The server can relax the gate with
+ * {@code quickDeposit.requireCarried = false} (issue #13), which allows any
+ * stack in the container to move.</p>
  */
 public final class QuickDeposit {
 
@@ -77,9 +79,13 @@ public final class QuickDeposit {
     /**
      * The eligibility gate: at least one matching stack in the 36 main slots,
      * or present in any carried backpack (read-only scan - see
-     * {@link BackpackIntegration#contains}).
+     * {@link BackpackIntegration#contains}). Every stack qualifies while
+     * {@code quickDeposit.requireCarried} is off.
      */
     public static boolean isEligible(ServerPlayer player, ItemStack stack) {
+        if (!QuickLootConfig.SERVER.requireCarried.get()) {
+            return true;
+        }
         NonNullList<ItemStack> main = player.getInventory().items;
         for (int slot = 0; slot < 36; slot++) {
             ItemStack present = main.get(slot);

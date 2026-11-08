@@ -337,6 +337,49 @@ public final class LightmansCurrencyGameTests {
         helper.succeed();
     }
 
+    /**
+     * The coin scoop has its own server key (issue #13): with every other
+     * drop gate on, {@code drops.lightmansCoins=false} leaves LC's
+     * death-spawned coin on the ground while the kill's ordinary loot still
+     * inserts and the wallet stays untouched.
+     */
+    @GameTest(template = "empty")
+    public static void lightmansCoinsOffLeaveDeathCoins(GameTestHelper helper) {
+        ServerPlayer killer = TestSupport.join(helper, "coin-off");
+        WalletHandler.get(killer).setWallet(new ItemStack(ModItems.WALLET_LEATHER.get()));
+        long before = LightmansCurrencyIntegration.walletTotal(killer);
+        var config = QuickLootConfig.SERVER;
+        boolean wasCoins = config.lightmansCoins.get();
+        var victim = helper.makeMockPlayer(GameType.CREATIVE);
+        var level = helper.getLevel();
+        var coin = new ItemEntity(level, 0.5, 1.0, 0.5, new ItemStack(ModItems.COIN_COPPER.get(), 3));
+        TestSupport.check(level.addFreshEntity(coin), "fixture: the coin entity must spawn");
+        var drops = new ArrayList<ItemEntity>();
+        drops.add(itemAt(level, helper.absolutePos(BlockPos.ZERO), new ItemStack(Items.DIAMOND)));
+        var event = new LivingDropsEvent(
+                victim, level.damageSources().playerAttack(killer), drops, true);
+        try {
+            config.lightmansCoins.set(false);
+
+            DropEvents.handleLivingDrops(event, null);
+
+            TestSupport.check(!event.isCanceled(), "never canceled");
+            TestSupport.check(!coin.isRemoved(),
+                    "lightmansCoins off: LC's coins stay on the ground");
+            TestSupport.check(LightmansCurrencyIntegration.walletTotal(killer) == before,
+                    "lightmansCoins off: no wallet credit");
+            TestSupport.check(event.getDrops().isEmpty(),
+                    "lightmansCoins off: ordinary loot still inserts");
+            TestSupport.check(TestSupport.countItem(killer, Items.DIAMOND) == 1,
+                    "the diamond still lands with the killer");
+        } finally {
+            config.lightmansCoins.set(wasCoins);
+            // Fixture teardown: keep the shared scan box clean for siblings.
+            coin.discard();
+        }
+        helper.succeed();
+    }
+
     private static ItemEntity itemAt(ServerLevel level, BlockPos absolutePos, ItemStack stack) {
         Vec3 pos = Vec3.atBottomCenterOf(absolutePos);
         return new ItemEntity(level, pos.x, pos.y, pos.z, stack);

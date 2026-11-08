@@ -45,12 +45,13 @@ import org.bitwisemadness.quickloot.party.ResolvedParty;
  * intact. Cancellation is never used - for blocks it would suppress
  * {@code spawnAfterBreak} and experience entirely.</p>
  *
- * <p>Experience follows the same rules as the items it accompanies: the same
- * config gates ({@code enabled} + {@code mobDrops}/{@code blockDrops}), the
- * same party recipients and amount matrix, and the same Loot Journal pickup
- * notification (via {@code pickupXp}, since no orb entity exists to trigger
- * one). Block drops and block experience are never party-shared - the breaker
- * keeps them.</p>
+ * <p>Experience rides the same party recipients, amount matrix and Loot
+ * Journal notification as the items beside it (via {@code pickupXp}, since no
+ * orb entity exists to trigger one), but its switches are its own (issue
+ * #13): {@code enabled} + {@code mobExperience} for kills and {@code enabled}
+ * + {@code blockExperience} for mining, each independent of the item keys, so
+ * either axis can run vanilla while the other inserts. Block drops and block
+ * experience are never party-shared - the breaker keeps them.</p>
  *
  * <p>Within one kill the party distribution is resolved exactly once: in
  * {@code dropAllDeathLoot} the experience event fires immediately before the
@@ -204,10 +205,12 @@ public final class DropEvents {
      * fires before this event, so they exist only in the world. Only coins
      * spawned this tick are taken - older ground coins belong to vanilla
      * pickup (and Lightman's Currency's own wallet divert) - and only while
-     * Lightman's Currency is loaded, so its absence changes nothing.
+     * Lightman's Currency is loaded and {@code drops.lightmansCoins} is on
+     * (issue #13), so their absence or the toggle changes nothing.
      */
     private static List<ItemEntity> collectFreshCoins(ServerLevel level, LivingEntity victim) {
-        if (!ModList.get().isLoaded("lightmanscurrency")) {
+        if (!ModList.get().isLoaded("lightmanscurrency")
+                || !QuickLootConfig.SERVER.lightmansCoins.get()) {
             return List.of();
         }
         List<ItemEntity> fresh = new ArrayList<>();
@@ -230,15 +233,15 @@ public final class DropEvents {
     }
 
     /**
-     * Kill experience with the same rules as the kill's items: same config
-     * gates, same party recipients and amount matrix, awarded directly instead
-     * of spawning an orb (the event amount is mutated to 0, never canceled).
-     * The bridge overload mirrors {@link #handleLivingDrops} as the GameTest
-     * seam.
+     * Kill experience with the kill's party recipients and amount matrix,
+     * gated by {@code enabled} + {@code mobExperience} (independent of
+     * {@code mobDrops}, issue #13), awarded directly instead of spawning an
+     * orb (the event amount is mutated to 0, never canceled). The bridge
+     * overload mirrors {@link #handleLivingDrops} as the GameTest seam.
      */
     public static void handleLivingXpDrop(LivingExperienceDropEvent event, PartyBridge bridge) {
         QuickLootConfig.Server config = QuickLootConfig.SERVER;
-        if (!config.enabled.get() || !config.mobDrops.get()) {
+        if (!config.enabled.get() || !config.mobExperience.get()) {
             return;
         }
         int xp = event.getDroppedExperience();
@@ -279,7 +282,10 @@ public final class DropEvents {
     /**
      * Break-loot insertion with a direct experience award to the breaker. No
      * party distribution (items or XP), never canceled - the amount mutation
-     * alone turns the vanilla {@code popExperience} into a no-op.
+     * alone turns the vanilla {@code popExperience} into a no-op. The two
+     * halves have their own switches (issue #13): items ride
+     * {@code blockDrops}, XP rides {@code blockExperience}; with both off (or
+     * master off) the event is left entirely alone.
      *
      * <p>The award mirrors the gates {@code popExperience} applies downstream
      * of the event: with {@code doTileDrops} off, or during a block-snapshot
@@ -289,29 +295,37 @@ public final class DropEvents {
      */
     public static void handleBlockDrops(BlockDropsEvent event) {
         QuickLootConfig.Server config = QuickLootConfig.SERVER;
-        if (!config.enabled.get() || !config.blockDrops.get()) {
+        if (!config.enabled.get()) {
+            return;
+        }
+        boolean insertItems = config.blockDrops.get();
+        boolean awardXp = config.blockExperience.get();
+        if (!insertItems && !awardXp) {
             return;
         }
         if (!(event.getBreaker() instanceof ServerPlayer player)) {
             return;
         }
         List<ItemStack> notifications = new ArrayList<>();
-        List<ItemEntity> drops = new ArrayList<>(event.getDrops());
-        List<ItemEntity> absorbed = new ArrayList<>();
-        for (ItemEntity entity : drops) {
-            ItemStack leftover = DropInserter.insert(player, entity.getItem(), notifications);
-            if (leftover.isEmpty()) {
-                absorbed.add(entity);
-            } else if (leftover.getCount() != entity.getItem().getCount()) {
-                entity.setItem(leftover);
+        if (insertItems) {
+            List<ItemEntity> drops = new ArrayList<>(event.getDrops());
+            List<ItemEntity> absorbed = new ArrayList<>();
+            for (ItemEntity entity : drops) {
+                ItemStack leftover = DropInserter.insert(player, entity.getItem(), notifications);
+                if (leftover.isEmpty()) {
+                    absorbed.add(entity);
+                } else if (leftover.getCount() != entity.getItem().getCount()) {
+                    entity.setItem(leftover);
+                }
             }
+            event.getDrops().removeAll(absorbed);
         }
-        event.getDrops().removeAll(absorbed);
 
         ServerLevel level = event.getLevel();
         int xp = event.getDroppedExperience();
         int awarded = 0;
-        if (xp > 0
+        if (awardXp
+                && xp > 0
                 && level.getGameRules().getBoolean(GameRules.RULE_DOBLOCKDROPS)
                 && !level.restoringBlockSnapshots) {
             event.setDroppedExperience(0);
