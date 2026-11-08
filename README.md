@@ -1,114 +1,111 @@
 # Quick Loot
 
-Mobs' and blocks' loot goes **straight into your inventory** instead of scattering on the
-ground — with overflow spilling into your **Sophisticated Backpacks**, a **quick-insert
-button** on loot containers, **party loot sharing**, experience awarded directly instead
-of spawning orbs, and **Lightman's Currency coins routed into your wallet**.
+Quick Loot puts mob and block drops, and the experience they carry, straight
+into your inventory instead of leaving them on the ground. You walk past a kill
+and the loot is already yours, and a mined vein fills your slots while the
+experience bar fills with no orb in sight.
+
+Overflow spills into carried Sophisticated Backpacks, loot containers get a
+one-click deposit button, party kills can be shared or rotated, and with
+Lightman's Currency installed your coins go into the equipped wallet rather
+than clogging the inventory.
 
 ## What it does
 
-- **Kill and mine loot lands in your inventory.** Mob death drops and block break drops
-  are inserted into the killer's / breaker's 36 main slots the moment they would have
-  spawned — merge into existing stacks first, then empty slots. Whatever genuinely does
-  not fit stays in the world; nothing is ever lost.
-- **Backpack spill.** With [Sophisticated Backpacks](https://www.curseforge.com/minecraft/mc-mods/sophisticated-backpacks)
-  installed, overflow continues into your carried backpacks through their filtered IO
-  handler, so filter, void, slot-blocker and overflow upgrades all apply.
-- **Experience comes with the loot.** Mob and block experience is awarded directly to the
-  recipients instead of spawning orbs, using the exact same rules as picking an orb up —
-  mending repairs first, and Loot Journal still shows the pickup notification. Gates off
-  (`enabled` / `mobDrops` / `blockDrops`) restore vanilla orbs and drops completely.
-- **Quick-insert button.** Loot containers ([Chest](https://minecraft.wiki/w/Chest),
-  [Shulker Box](https://minecraft.wiki/w/Shulker_Box), [Hopper](https://minecraft.wiki/w/Hopper),
-  [Dispenser](https://minecraft.wiki/w/Dispenser)) get a button that empties them into
-  your inventory in one click. It only appears for containers the server has actually
-  seen loot in (latched across reopens), and only for stacks you already carry — the
-  scope config widens it to any container if you want that.
-- **Party loot.** Kills shared with a party can go to the killing blow (default), rotate
-  one member per kill, or split every kill — either as a full copy per member or divided
-  evenly with remainders to the primary. Block drops and experience are never shared.
-- **Coins go to your wallet.** With [Lightman's Currency](https://www.curseforge.com/minecraft/mc-mods/lightmans-currency)
-  installed, coin stacks on every insert path — mob drops, block drops, party shares and
-  quick-deposit — are credited to your equipped wallet first (server toggle,
-  `drops.coinsToWallet`, default on). Inventory and backpacks remain the fallback when no
-  wallet is worn or the wallet cannot take the coins, so nothing is ever lost. Loot
-  Journal shows a pickup toast for **any** currency entering a wallet during play —
-  Quick Loot's inserts, Lightman's Currency's own auto-pickup, wallet enchantments and
-  wallet-screen deposits alike — exactly once per insert.
+- **Drops land in your inventory.** Mob death drops and block break drops are
+  inserted into the killer's or breaker's 36 main slots the moment they would
+  have spawned, merging into existing stacks first and then filling empty ones.
+  Anything that genuinely does not fit stays in the world.
+- **Backpacks take the overflow.** With Sophisticated Backpacks installed, the
+  remainder continues into your carried backpacks through their filtered insert
+  path, so filter, void, slot-blocker and overflow upgrades all apply.
+- **Experience comes with the loot.** Mob and block experience is awarded
+  directly instead of spawning orbs, using the same rules as picking an orb up,
+  mending repairs first and all. Loot Journal still shows the pickup
+  notification, and turning the config gates off restores vanilla drops and
+  orbs completely.
+- **A quick-insert button on loot containers.** Chests, shulker boxes, hoppers
+  and dispensers the server has actually seen loot in get a button that empties
+  them into your inventory in one click, and only for stacks you already carry.
+  A config scope widens it to any container if you want that.
+- **Party loot.** Kills shared with a party can go to the killing blow (the
+  default), rotate one member per kill, or split every kill, either as a full
+  copy per member or divided evenly with remainders to the primary. Block drops
+  and experience are never shared.
+- **Coins go to your wallet.** With Lightman's Currency installed, coin stacks
+  on every insert path are credited to your equipped wallet first, with
+  inventory and backpacks as the fallback when no wallet is worn. Loot Journal
+  shows a pickup toast for any currency entering a wallet during play, exactly
+  once per insert, including Lightman's Currency's own auto-pickup and
+  wallet-screen deposits.
 
 ## Party loot
 
-Who receives a kill's loot is the **rule**; how much each recipient gets is the
-**amount**. Both are server config (`party.lootRule`, `party.lootAmount`), and the
-feature is inert at the defaults — the killer keeps everything, exactly like solo play.
+Who receives a kill's loot is the rule and how much each recipient gets is the
+amount, both set in server config (`party.lootRule`, `party.lootAmount`). At
+the defaults the feature is inert: the killer keeps everything, exactly like
+solo play.
 
 | Rule \ Amount | `OWNER_ONLY` (default) | `FULL_TO_ALL` | `SPLIT_EQUALLY` |
 |---|---|---|---|
-| `KILLING_BLOW` (default) — the killer only | killer gets the whole stack | killer gets the whole stack (only one recipient) | killer gets the whole stack (only one recipient) |
-| `ROUND_ROBIN` — one rotating member per kill | the rotated member gets the whole stack | the rotated member gets the whole stack (only one recipient) | the rotated member gets the whole stack (only one recipient) |
-| `FREE_FOR_ALL` — every eligible member | killer (primary) gets the whole stack; the rest get nothing | **every member receives a full copy** of each stack | each stack divided evenly; indivisible remainders go one each in stable order, **primary (killer) first** |
+| `KILLING_BLOW` (default), killer only | the killer gets the whole stack | the killer gets the whole stack (the only recipient) | the killer gets the whole stack (the only recipient) |
+| `ROUND_ROBIN`, one rotating member per kill | the rotated member gets the whole stack | the rotated member gets the whole stack (the only recipient) | the rotated member gets the whole stack (the only recipient) |
+| `FREE_FOR_ALL`, every eligible member | the killer (primary) gets the whole stack and the rest get nothing | every member receives a full copy of each stack | each stack divided evenly, remainders one each in stable order with the killer (primary) first |
 
-Notes: recipients are limited to party members who are **online and in the killed mob's
-dimension** (round robin rotates past the rest), rotation state persists per party in
-world data, and each recipient's share rides the normal insert chain — inventory,
-then backpacks, with any true remainder spawning at the death site. Block drops and
-block experience are never party-shared. Membership comes from Better Party, Open
-Parties and Claims or FTB Teams (`party.source=AUTO` tries them in that order).
+Recipients are limited to party members who are online and in the killed mob's
+dimension, so round robin rotates past the rest. Rotation state persists per
+party in the world data, and each recipient's share rides the normal insert
+chain (inventory, then backpacks), with any true remainder spawning at the
+death site. Block drops and block experience are never party-shared.
+Membership comes from Better Party, Open Parties and Claims or FTB Teams;
+`party.source=AUTO` tries them in that order.
 
-## Dependencies
+## Settings
 
-| | Mod | Why |
-|---|---|---|
-| Required | Minecraft | — |
-| Required | NeoForge | — |
-| Optional | [Sophisticated Backpacks](https://www.curseforge.com/minecraft/mc-mods/sophisticated-backpacks) | Overflow spills into carried backpacks through their filtered IO handler |
-| Optional | [Loot Journal](https://www.curseforge.com/minecraft/mc-mods/loot-journal) | Pickup notifications for inserted stacks and experience (client side) |
-| Optional | [Lightman's Currency](https://www.curseforge.com/minecraft/mc-mods/lightmans-currency) | Coins route into the equipped wallet, with a pickup toast for every wallet insert |
-| Optional | [Better Party](https://www.curseforge.com/minecraft/mc-mods/better-party), [Open Parties and Claims](https://modrinth.com/mod/open-parties-and-claims), [FTB Teams](https://www.curseforge.com/minecraft/mc-mods/ftb-teams) | Party membership for shared kill loot (tried in that order under `AUTO`) |
-
-Every optional dependency is gated behind `ModList.isLoaded` in exactly one adapter
-class, so the mod works — and never class-loads their code — without them.
-
-## Configuration
-
-SERVER values live in `quick_loot-server.toml`; all of them can be edited in-game (see
-below). Highlights:
+Installed and enabled there is nothing to do first: the defaults behave like
+vanilla plus straight insertion. Every toggle is a config value, editable
+in-game with Configured installed.
 
 | Key | Default | What it does |
 |---|---|---|
 | `drops.enabled` | `true` | Master switch for all Quick Loot behaviour |
-| `drops.mobDrops` / `drops.blockDrops` | `true` | Insert mob / block drops (experience follows the same gates) |
+| `drops.mobDrops` / `drops.blockDrops` | `true` | Insert mob and block drops; experience follows the same gates |
 | `drops.useBackpacks` | `true` | Spill overflow into carried Sophisticated Backpacks |
 | `drops.coinsToWallet` | `true` | Route Lightman's Currency coins into the equipped wallet on every insert path |
 | `drops.lootJournalNotify` | `true` | Send inserted stacks and awarded experience to Loot Journal |
-| `quickDeposit.enabled` / `quickDeposit.scope` | `true` / `LOOT_ONLY` | The quick-insert button and how much of it sees |
-| `party.enabled` / `party.lootRule` / `party.lootAmount` | `true` / `KILLING_BLOW` / `OWNER_ONLY` | Party sharing: who receives, and how much |
+| `quickDeposit.enabled` | `true` | Allow the quick-insert button; the server validates every click |
+| `quickDeposit.scope` | `LOOT_ONLY` | `LOOT_ONLY` shows the button only on containers the server has seen loot in, `ALL_CONTAINERS` on any whitelisted container |
+| `showQuickDepositButton` | `true` | Client-side display of the quick-insert button |
+| `party.enabled` | `true` | Distribute kill loot among party members |
+| `party.source` | `AUTO` | Party membership source; `AUTO` tries Better Party, then Open Parties and Claims, then FTB Teams |
+| `party.lootRule` | `KILLING_BLOW` | Who receives loot (see the matrix above) |
+| `party.lootAmount` | `OWNER_ONLY` | How much each recipient gets (see the matrix above) |
 
-## In-game config editing
+Turning `drops.coinsToWallet` off leaves coins as ordinary items, and setting
+`party.lootRule` back to `KILLING_BLOW` returns every kill to solo behaviour.
 
-Mods built with this template can be edited in-game with
-[Configured](https://www.curseforge.com/minecraft/mc-mods/configured) - install
-it like any other mod; it adds no code to this one. Open the mod list, select a
-mod, press Config, and change values directly: Configured writes through
-NeoForge's config system, so a reload applies the new values without restarting
-the game.
+## Dependencies
 
-This mod pre-wires the config-screen background in
-`src/main/templates/META-INF/neoforge.mods.toml`
-(`[modproperties.${mod_id}] configuredBackground`) - point it at any texture you
-like. Note Configured only shows a menu for mods that actually register a
-config: a mod with no registered settings has nothing to show.
+The mod runs on its own; each of these is optional and adds a piece:
+
+| | Mod | Why |
+|---|---|---|
+| Optional | [Sophisticated Backpacks](https://www.curseforge.com/minecraft/mc-mods/sophisticated-backpacks) | Overflow spills into carried backpacks through their filtered insert path |
+| Optional | [Loot Journal](https://www.curseforge.com/minecraft/mc-mods/loot-journal) | Pickup notifications for inserted stacks and experience (client side) |
+| Optional | [Lightman's Currency](https://www.curseforge.com/minecraft/mc-mods/lightmans-currency) | Coins route into the equipped wallet, with a pickup toast for every wallet insert |
+| Optional | [Better Party](https://www.curseforge.com/minecraft/mc-mods/better-party), [Open Parties and Claims](https://modrinth.com/mod/open-parties-and-claims), [FTB Teams](https://www.curseforge.com/minecraft/mc-mods/ftb-teams) | Party membership for shared kill loot (tried in that order under `AUTO`) |
 
 ## Credits
 
-- Built on [NeoForge](https://neoforged.net/).
-- Optional integrations: [Sophisticated Backpacks](https://www.curseforge.com/minecraft/mc-mods/sophisticated-backpacks),
-  [Loot Journal](https://www.curseforge.com/minecraft/mc-mods/loot-journal),
-  [Lightman's Currency](https://www.curseforge.com/minecraft/mc-mods/lightmans-currency),
-  [Better Party](https://www.curseforge.com/minecraft/mc-mods/better-party),
-  [Open Parties and Claims](https://modrinth.com/mod/open-parties-and-claims) and
-  [FTB Teams](https://www.curseforge.com/minecraft/mc-mods/ftb-teams) — all through
-  their public APIs only.
+- [NeoForge](https://neoforged.net/) — the mod platform.
+- [Sophisticated Backpacks](https://www.curseforge.com/minecraft/mc-mods/sophisticated-backpacks) by P3pp3r1y — backpack overflow through its public API.
+- [Loot Journal](https://www.curseforge.com/minecraft/mc-mods/loot-journal) by Obscuria — pickup notifications through its public API.
+- [Lightman's Currency](https://www.curseforge.com/minecraft/mc-mods/lightmans-currency) by Lightman314 — wallet and coin routing through its public API.
+- [Better Party](https://www.curseforge.com/minecraft/mc-mods/better-party) — party membership through its public API.
+- [Open Parties and Claims](https://modrinth.com/mod/open-parties-and-claims) by Xaero — party membership through its public API.
+- [FTB Teams](https://www.curseforge.com/minecraft/mc-mods/ftb-teams) — party membership through its public API.
+
+This mod embeds no third-party assets, textures, models or code.
 
 ## License
 
