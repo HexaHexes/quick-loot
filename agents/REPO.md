@@ -1,4 +1,4 @@
-# Repo rules — <repo name>
+# Repo rules — quick-loot
 
 Repo-specific rules and notes. The org-wide `AGENTS.md` beside this file is
 maintained in [`neoforge-mod-template`](https://github.com/HexaHexes/neoforge-mod-template)
@@ -6,21 +6,84 @@ and pulled in verbatim — **never hand-edit it.** Everything in this file is th
 repo's own and is edited freely; keep it aligned with the org rules rather than
 restating them.
 
-**Repo:** `HexaHexes/<repo-name>` · **Mod ID:** `<mod_id>` · **Branch:** `main`
-**Platform:** Minecraft 1.21.1 / NeoForge 21.1.259 / JDK 21 · **Jar:** `build/libs/<mod_id>-<version>.jar`
+**Repo:** `HexaHexes/quick-loot` · **Mod ID:** `quick_loot` · **Branch:** `main`
+**Platform:** Minecraft 1.21.1 / NeoForge 21.1.259 / JDK 21 · **Jar:** `build/libs/quick_loot-<version>.jar`
 
-One-paragraph description of what this mod is and what it changes in the game.
+Inserts mob and block drops straight into the player's inventory (with
+Sophisticated Backpacks overflow), awards the accompanying experience directly
+instead of spawning orbs, adds a server-validated quick-insert button on loot
+containers, shares kill loot among party members, and routes Lightman's Currency
+coins into the player's equipped wallet — with Loot Journal pickup notifications
+for everything that lands, including every wallet insert.
 
 **Dependencies**
 - Required: Minecraft, NeoForge.
-- Optional: list any dependency the mod works without, and how the code gates it.
+- Optional: Sophisticated Backpacks (+ Sophisticated Core) for backpack overflow,
+  Loot Journal (client) for pickup toasts, Lightman's Currency for wallet routing,
+  and Better Party / Open Parties and Claims / FTB Teams for party membership.
+  Each mod's types live in exactly one adapter class behind `ModList.isLoaded`
+  (`compat/BackpackIntegration`, `compat/LightmansCurrencyIntegration`,
+  `client/LootJournalClientIntegration`, `party/*Adapter`); nothing else may
+  import their packages.
 
-**Test:** `./gradlew runGameTestServer` — `<ClassName>` (1 test). `expectedTests = 1`
-in `build.gradle` must match the `@GameTest` count.
+**Test:** `./gradlew runGameTestServer` — `QuickLootGameTests` +
+`LightmansCurrencyGameTests` (14 tests). `expectedTests = 14` in `build.gradle`
+must match the `@GameTest` count. JUnit (`src/test`) covers the pure party
+matrix; GameTests cover everything that needs a live server.
 
 **Gotchas**
-- Note anything a future edit could break: mixin targets, version-file coupling,
-  tag overrides, or a dependency that is optional in the toml but hard in the code.
-- Client-array mixins load nowhere in CI (gametests run a dedicated server): never
-  `@Shadow` inherited Minecraft members, and launch `runClient` once before a release
-  - full rules in `docs/mixin-rules.md`.
+- **Never cancel a drop event** — mutate instead: remove absorbed `ItemEntity`s
+  from `getDrops()`, `setItem(leftover)` on partial ones, `setDroppedExperience(0)`
+  on XP. Cancelling `BlockDropsEvent` suppresses `spawnAfterBreak`; zeroing is
+  what makes vanilla's `popExperience` a no-op. Block XP mirrors popExperience's
+  own downstream gates (`RULE_DOBLOCKDROPS`, `!restoringBlockSnapshots`) before
+  awarding.
+- **XP ordering memo**: `LivingExperienceDropEvent` fires before `LivingDropsEvent`,
+  and the ender dragon re-fires XP across its death animation — so distribution is
+  resolved at most once per kill via the `WeakHashMap` `RESOLVED_KILLS` keyed by
+  (killed entity, killer UUID). Do not clear it on read; a killer mismatch must
+  resolve fresh.
+- **Single insert funnel**: every path (mob drops, block drops, party shares,
+  quick-deposit, wallet routing) goes through `DropInserter.insert`. Backpack
+  inserts must stay on `getInventoryForInputOutput()` so filters/void/slot-blockers
+  apply. The `insertedOut` baseline is taken *after* the wallet stage: the routed
+  portion is never self-notified — `WalletCoinObserver` owns wallet toasts, which
+  is what makes double-toasts impossible.
+- **Observer invariants** (issue #4): value-based (Σ `MoneyValue.getCoreValue`),
+  never slot-based — `WalletItem.PickupCoin` auto-exchanges and re-sorts slots.
+  Baseline fingerprint is the equipped wallet's *identity* (`==`, never `equals` —
+  deposits mutate in place). Baselines clear while toasts are gated, so re-enabling
+  never toasts a backlog. `coinStacksFor` reads the wallet's *data contents*
+  (`WalletItem.getDataWrapper(...).getContents()`) — `WalletHelpers.getWalletContainer`
+  is a one-slot container holding the wallet item itself, not its coins.
+- **Payload types**: build `CustomPacketPayload.Type` with
+  `ResourceLocation.fromNamespaceAndPath(MOD_ID, ...)` — `createType(String)` is
+  minecraft-namespaced and crashes the server at registration (first boot caught
+  this). Channel ids: `quick_loot:inserted`, `quick_loot:container_flag`,
+  `quick_loot:quick_deposit`.
+- **Visibility discipline**: helpers stay package-private unless a test seam
+  forces otherwise (`XpAwards` is package-private; `LootContainerLatches.load` /
+  `forLevel` are deliberately *not* widened — NBT round-trip is covered by the
+  `InsertedPayload` STREAM_CODEC test instead). The GameTest seams are the
+  `handleLivingDrops` / `handleLivingXpDrop` / `handleBlockDrops` bridge overloads
+  and `WalletCoinObserver.capture`.
+- **Menu whitelist lockstep**: the client button gate and the server's
+  `QuickDeposit.run` validation must both go through `MenuWhitelist.containerOf`
+  (Chest / Shulker / Hopper / Dispenser). Evidence is latched (`LootContainerLatches`)
+  because `getLootTable()` nulls on first open; `ALL_CONTAINERS` is the escape hatch.
+- **Party source AUTO order**: Better Party → OPaC → FTB Teams. OPaC's adapter
+  prefers owner-then-uuid order; FTB filters to party-type teams only.
+- **GameTest harness** (`src/gametest`): mock players join through the real
+  `placeNewPlayer`, so every payload a staged mod may send at login must be in
+  `TestSupport.AD_HOC_CHANNELS` — new misses surface as
+  `GameTest join aborted (...)` warnings naming the channel; extend the list from
+  the run log. Generated mock names stay ≤ 16 chars (FTB team syncs use
+  username-limited codecs), `run/world` is wiped before every run (persisted
+  parties/teams from a prior run break the next run's joins), and
+  `GameTestServerFixes` (gametest source only, never jarred) installs the profile
+  cache vanilla's `GameTestServer` omits — OPaC dereferences it at server-about-to
+  -start.
+- **LC pin**: CurseMaven `lightmans-currency-472521:9048585` (= 1.21-2.3.0.6) is
+  both the `compileOnly` and the `gametestMods` pin; mods.toml's optional range
+  floor must move with it. FTB Library uses project `ftb-library-forge-404465`
+  (project `ftb-library-846592` has no jar on CurseMaven anymore).

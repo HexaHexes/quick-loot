@@ -89,12 +89,68 @@ tasks.withType(JavaCompile).configureEach {
 // every derived repo.
 repositories {
     mavenCentral()
+    // CurseMaven - resolves mod jars by CurseForge project + file id, so a
+    // clean checkout (and CI) resolves every jar without a local folder.
+    maven {
+        name = 'CurseMaven'
+        url = 'https://cursemaven.com'
+        content { includeGroup 'curse.maven' }
+    }
+    // Modrinth Maven - Open Parties and Claims is pinned from Modrinth.
+    maven {
+        name = 'Modrinth'
+        url = 'https://api.modrinth.com/maven'
+        content { includeGroup 'maven.modrinth' }
+    }
+}
+
+// Runtime closure for the GameTest run: staged into run/mods by
+// prepareGametestMods, exactly like the rest of the org's mod repos.
+configurations {
+    gametestMods
 }
 
 dependencies {
+    // Pins live here rather than in gradle.properties: the version doctrine
+    // keeps that file for version bumps only (ci.yml), so pins ride with the
+    // dependency that needs them. File ids are the pack's installed files.
+    def sophisticatedBackpacksFileId = '9431839' // sophisticatedbackpacks-1.21.1-3.26.20.2244
+    def sophisticatedCoreFileId = '9477647'      // sophisticatedcore-1.21.1-1.5.31.2460
+    def lootJournalFileId = '8922056'            // loot_journal-neoforge-1.21.1-6.2.2
+    def betterPartyFileId = '9435051'             // better-party-neoforge-1.21.1-1.1.9
+    def ftbTeamsFileId = '9434081'                // ftb-teams-neoforge-2101.1.12
+    def ftbLibraryFileId = '9350706'             // ftb-library-neoforge-2101.1.39 (project ftb-library-forge)
+    def architecturyFileId = '8492726'           // architectury-api (neoforge, 1.21.1)
+    def opacVersion = 'neoforge-1.21.1-0.33.0'   // open-parties-and-claims (Modrinth)
+    def lightmansCurrencyFileId = '9048585'      // lightmanscurrency-1.21-2.3.0.6
+
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // Optional integrations: compile against the real APIs, never ship them.
+    // Each is gated behind ModList.isLoaded in its own adapter class.
+    compileOnly "curse.maven:sophisticated-backpacks-422301:${sophisticatedBackpacksFileId}"
+    compileOnly "curse.maven:sophisticated-core-618298:${sophisticatedCoreFileId}"
+    compileOnly "curse.maven:loot-journal-1120395:${lootJournalFileId}"
+    compileOnly "curse.maven:better-party-1610184:${betterPartyFileId}"
+    compileOnly "curse.maven:ftb-teams-404468:${ftbTeamsFileId}"
+    compileOnly "maven.modrinth:open-parties-and-claims:${opacVersion}"
+    compileOnly "curse.maven:lightmans-currency-472521:${lightmansCurrencyFileId}"
+
+    // GameTest runtime: the backpack GameTests need Sophisticated Backpacks
+    // and its required Sophisticated Core; the party-adapter smoke GameTest
+    // needs every party mod staged (FTB Teams hard-requires ftblibrary and
+    // architectury); the wallet GameTests need Lightman's Currency. Loot
+    // Journal is client-only and never staged.
+    gametestMods "curse.maven:sophisticated-backpacks-422301:${sophisticatedBackpacksFileId}"
+    gametestMods "curse.maven:sophisticated-core-618298:${sophisticatedCoreFileId}"
+    gametestMods "curse.maven:better-party-1610184:${betterPartyFileId}"
+    gametestMods "curse.maven:ftb-teams-404468:${ftbTeamsFileId}"
+    gametestMods "curse.maven:ftb-library-forge-404465:${ftbLibraryFileId}"
+    gametestMods "curse.maven:architectury-api-419699:${architecturyFileId}"
+    gametestMods "maven.modrinth:open-parties-and-claims:${opacVersion}"
+    gametestMods "curse.maven:lightmans-currency-472521:${lightmansCurrencyFileId}"
 }
 
 test {
@@ -103,10 +159,26 @@ test {
 
 // --- GameTest harness -------------------------------------------------------
 
+// Stage the gametest runtime closure into run/mods before the headless run,
+// exactly like the rest of the org's mod repos.
+tasks.register('prepareGametestMods', Sync) {
+    from configurations.gametestMods
+    into 'run/mods'
+}
+
 // Grade the run on the log summary: the task's exit code is not a reliable
 // signal. Keep expectedTests in sync with the @GameTest methods.
 tasks.matching { it.name == 'runGameTestServer' }.configureEach {
-    def expectedTests = 1
+    dependsOn 'prepareGametestMods'
+
+    // GameTests are stateless: party/team data left in the world by a prior
+    // run (FTB Teams syncs every stored team at login) breaks the next run's
+    // mock joins, so each run starts from a clean world. Configs persist.
+    doFirst {
+        delete 'run/world'
+    }
+
+    def expectedTests = 14
     doLast {
         def log = file('run/logs/latest.log')
         if (!log.exists()) {
@@ -158,7 +230,7 @@ publishing {
     repositories {
         maven {
             name = 'GitHubPackages'
-            url = uri('https://maven.pkg.github.com/HexaHexes/neoforge-mod-template')
+            url = uri('https://maven.pkg.github.com/HexaHexes/quick-loot')
             credentials {
                 username = System.getenv('GITHUB_ACTOR') ?: project.findProperty('gpr.user')
                 password = System.getenv('GITHUB_TOKEN') ?: project.findProperty('gpr.key')
