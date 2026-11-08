@@ -10,13 +10,18 @@ import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -26,6 +31,7 @@ import org.bitwisemadness.quickloot.compat.LightmansCurrencyIntegration;
 import org.bitwisemadness.quickloot.config.QuickLootConfig;
 import org.bitwisemadness.quickloot.container.LootContainerLatches;
 import org.bitwisemadness.quickloot.container.QuickDeposit;
+import org.bitwisemadness.quickloot.loot.DropEvents;
 import org.bitwisemadness.quickloot.loot.DropInserter;
 import org.bitwisemadness.quickloot.loot.WalletCoinObserver;
 import org.bitwisemadness.quickloot.net.InsertedPayload;
@@ -221,6 +227,119 @@ public final class LightmansCurrencyGameTests {
             config.lootJournalNotify.set(wasNotify);
         }
         helper.succeed();
+    }
+
+    /**
+     * Lightman's Currency death-spawned coins (issue #11) ride the same funnel
+     * as event drops: a kill whose only loot is an LC-spawned coin entity ends
+     * with that coin discarded from the world, its value in the wallet, and
+     * one Loot Journal toast of exactly that value on the observer's tick
+     * path. Assertions are scoped to the fixture entity - sibling tests share
+     * the mock victim's world-origin scan box, so a box query would read their
+     * leftovers as ours.
+     */
+    @GameTest(template = "empty")
+    public static void deathSpawnedCoinsReachTheWallet(GameTestHelper helper) {
+        ServerPlayer killer = TestSupport.join(helper, "coin-killer");
+        WalletHandler.get(killer).setWallet(new ItemStack(ModItems.WALLET_LEATHER.get()));
+        TestSupport.drainInserted(killer);
+        TestSupport.check(WalletCoinObserver.capture(killer).isEmpty(),
+                "first sight only records a baseline");
+        long before = LightmansCurrencyIntegration.walletTotal(killer);
+        long coinValue = valueOf(new ItemStack(ModItems.COIN_COPPER.get(), 3));
+
+        var victim = helper.makeMockPlayer(GameType.CREATIVE);
+        var level = helper.getLevel();
+        var coin = new ItemEntity(level, 0.5, 1.0, 0.5, new ItemStack(ModItems.COIN_COPPER.get(), 3));
+        TestSupport.check(level.addFreshEntity(coin), "fixture: the coin entity must spawn");
+
+        var event = new LivingDropsEvent(victim, level.damageSources().playerAttack(killer),
+                new ArrayList<>(), true);
+        DropEvents.handleLivingDrops(event, null);
+
+        TestSupport.check(!event.isCanceled(), "never canceled");
+        TestSupport.check(coin.isRemoved(),
+                "the death-spawned coin must be discarded (age=" + coin.getAge()
+                        + ", allowed=" + LightmansCurrencyIntegration.isCoinAllowed(coin.getItem()) + ")");
+        TestSupport.check(LightmansCurrencyIntegration.walletTotal(killer) - before == coinValue,
+                "the coin's value must land in the wallet");
+        TestSupport.check(TestSupport.countItem(killer, ModItems.COIN_COPPER.get()) == 0,
+                "no loose coins in the inventory");
+
+        // The observer owns wallet toasts and sends them on the tick path.
+        var server = helper.getLevel().getServer();
+        NeoForge.EVENT_BUS.post(new ServerTickEvent.Post(() -> true, server));
+        List<InsertedPayload> toasts = TestSupport.drainInserted(killer);
+        TestSupport.check(toasts.size() == 1, "exactly one toast for the insert");
+        TestSupport.check(valueOf(toasts.get(0).stacks()) == coinValue,
+                "the toast must report the inserted value");
+        helper.succeed();
+    }
+
+    /** With the gates off, LC's death coins stay on the ground like any vanilla drop. */
+    @GameTest(template = "empty")
+    public static void gatesOffLeaveDeathCoins(GameTestHelper helper) {
+        ServerPlayer killer = TestSupport.join(helper, "coin-gates");
+        var config = QuickLootConfig.SERVER;
+        boolean wasEnabled = config.enabled.get();
+        var victim = helper.makeMockPlayer(GameType.CREATIVE);
+        var level = helper.getLevel();
+        var coin = new ItemEntity(level, 0.5, 1.0, 0.5, new ItemStack(ModItems.COIN_COPPER.get(), 3));
+        TestSupport.check(level.addFreshEntity(coin), "fixture: the coin entity must spawn");
+        var drops = new ArrayList<ItemEntity>();
+        drops.add(itemAt(level, helper.absolutePos(BlockPos.ZERO), new ItemStack(Items.DIAMOND)));
+        var event = new LivingDropsEvent(victim, level.damageSources().playerAttack(killer), drops, true);
+        try {
+            config.enabled.set(false);
+            DropEvents.handleLivingDrops(event, null);
+
+            TestSupport.check(!event.isCanceled(), "never canceled");
+            TestSupport.check(!coin.isRemoved(),
+                    "gates off: LC's coins stay on the ground");
+            TestSupport.check(event.getDrops().size() == 1,
+                    "gates off: the event's own drops stay untouched");
+        } finally {
+            config.enabled.set(wasEnabled);
+            // Fixture teardown: the mock victim's scan box is shared with
+            // sibling tests, so a leftover coin here would pollute theirs.
+            coin.discard();
+        }
+        helper.succeed();
+    }
+
+    /** A coin from an earlier tick near the victim is left to vanilla pickup. */
+    @GameTest(template = "empty")
+    public static void olderCoinsAreLeftAlone(GameTestHelper helper) {
+        ServerPlayer killer = TestSupport.join(helper, "coin-stale");
+        WalletHandler.get(killer).setWallet(new ItemStack(ModItems.WALLET_LEATHER.get()));
+        long before = LightmansCurrencyIntegration.walletTotal(killer);
+
+        var victim = helper.makeMockPlayer(GameType.CREATIVE);
+        var level = helper.getLevel();
+        var coin = new ItemEntity(level, 0.5, 1.0, 0.5, new ItemStack(ModItems.COIN_COPPER.get(), 3));
+        TestSupport.check(level.addFreshEntity(coin), "fixture: the coin entity must spawn");
+        coin.tick();
+        TestSupport.check(coin.getAge() > 0, "fixture: the coin must be older than this kill");
+
+        var event = new LivingDropsEvent(victim, level.damageSources().playerAttack(killer),
+                new ArrayList<>(), true);
+        try {
+            DropEvents.handleLivingDrops(event, null);
+
+            TestSupport.check(!coin.isRemoved(), "an older coin must stay on the ground");
+            TestSupport.check(coin.getAge() > 0, "the survivor must still be older than this kill");
+            TestSupport.check(LightmansCurrencyIntegration.walletTotal(killer) == before,
+                    "an older coin must not credit the wallet");
+        } finally {
+            // Fixture teardown: keep the shared scan box clean for siblings.
+            coin.discard();
+        }
+        helper.succeed();
+    }
+
+    private static ItemEntity itemAt(ServerLevel level, BlockPos absolutePos, ItemStack stack) {
+        Vec3 pos = Vec3.atBottomCenterOf(absolutePos);
+        return new ItemEntity(level, pos.x, pos.y, pos.z, stack);
     }
 
     /** One stack's value in LC core units, straight from its own chain data. */

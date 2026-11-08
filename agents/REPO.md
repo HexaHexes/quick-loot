@@ -27,8 +27,8 @@ for everything that lands, including every wallet insert.
   import their packages.
 
 **Test:** `./gradlew runGameTestServer` — `QuickLootGameTests` +
-`LightmansCurrencyGameTests` + `SophisticatedBackpackGameTests` (20 tests).
-`expectedTests = 20` in `build.gradle`
+`LightmansCurrencyGameTests` + `SophisticatedBackpackGameTests` (23 tests).
+`expectedTests = 23` in `build.gradle`
 must match the `@GameTest` count. JUnit (`src/test`) covers the pure party
 matrix; GameTests cover everything that needs a live server.
 
@@ -54,6 +54,13 @@ matrix; GameTests cover everything that needs a live server.
   overflow clause). The `insertedOut` baseline is taken *after* the wallet
   stage: the routed portion is never self-notified - `WalletCoinObserver`
   owns wallet toasts, which is what makes double-toasts impossible.
+- **LC death coins are world entities** (issue #11): Lightman's Currency
+  spawns mob coins on `LivingDeathEvent`, which fires *before* the drops
+  event, so they are never in `event.getDrops()`. `DropEvents.collectFreshCoins`
+  scoops the age-0 coins around the victim into the shared distribution -
+  never widen that boundary past same-tick coins at the death site, or it
+  starts stealing ground coins that belong to vanilla pickup (and LC's own
+  wallet divert).
 - **Observer invariants** (issue #4): value-based (Σ `MoneyValue.getCoreValue`),
   never slot-based — `WalletItem.PickupCoin` auto-exchanges and re-sorts slots.
   Baseline fingerprint is the equipped wallet's *identity* (`==`, never `equals` —
