@@ -13,13 +13,16 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameRules;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent;
 import net.neoforged.neoforge.event.level.BlockDropsEvent;
 import org.bitwisemadness.quickloot.QuickLoot;
+import org.bitwisemadness.quickloot.compat.LightmansCurrencyIntegration;
 import org.bitwisemadness.quickloot.config.QuickLootConfig;
 import org.bitwisemadness.quickloot.net.InsertNotifier;
 import org.bitwisemadness.quickloot.party.PartyAmount;
@@ -103,8 +106,13 @@ public final class DropEvents {
         // round robin exactly once, whether or not this kill had items.
         Distribution distribution = distributionFor(event.getEntity(), killer, level, bridge);
 
+        // Lightman's Currency spawns mob coins as world entities before this
+        // event fires (issue #11), so they are never in the drops list: scoop
+        // up this tick's coins at the victim into the same distribution.
+        List<ItemEntity> externalCoins = collectFreshCoins(level, event.getEntity());
+
         List<ItemEntity> drops = new ArrayList<>(event.getDrops());
-        if (drops.isEmpty()) {
+        if (drops.isEmpty() && externalCoins.isEmpty()) {
             return;
         }
 
@@ -116,40 +124,28 @@ public final class DropEvents {
 
         List<ItemEntity> absorbed = new ArrayList<>();
         for (ItemEntity entity : drops) {
-            ItemStack stack = entity.getItem();
-            int[] shares = PartyLootRules.distribute(
-                    stack.getCount(),
-                    distribution.recipients().size(),
-                    distribution.primaryIndex(),
-                    amount);
-            List<ItemStack> leftovers = new ArrayList<>();
-            for (int i = 0; i < shares.length; i++) {
-                if (shares[i] <= 0) {
-                    continue;
-                }
-                ItemStack share = stack.copy();
-                share.setCount(shares[i]);
-                ItemStack leftover = DropInserter.insert(
-                        distribution.players().get(i),
-                        share,
-                        notifications.get(distribution.recipients().get(i)));
-                if (!leftover.isEmpty()) {
-                    leftovers.add(leftover);
-                }
-            }
-            if (leftovers.isEmpty()) {
+            ItemStack leftover = distributeStack(
+                    distribution, level, amount, notifications, entity.position(), entity.getItem());
+            if (leftover.isEmpty()) {
                 absorbed.add(entity);
-            } else {
-                // First remainder rides the original entity; any others (party
-                // shares that did not fit their recipient) spawn at the death spot.
-                entity.setItem(leftovers.get(0));
-                Vec3 pos = entity.position();
-                for (int i = 1; i < leftovers.size(); i++) {
-                    event.getDrops().add(new ItemEntity(level, pos.x, pos.y, pos.z, leftovers.get(i)));
-                }
+            } else if (leftover.getCount() != entity.getItem().getCount()) {
+                entity.setItem(leftover);
             }
         }
         event.getDrops().removeAll(absorbed);
+
+        // External coins already exist, so their lifecycle inverts the event
+        // list: discard when fully credited, update in place for a remainder.
+        // Never re-listed, so a later event cancellation cannot lose them.
+        for (ItemEntity entity : externalCoins) {
+            ItemStack leftover = distributeStack(
+                    distribution, level, amount, notifications, entity.position(), entity.getItem());
+            if (leftover.isEmpty()) {
+                entity.discard();
+            } else if (leftover.getCount() != entity.getItem().getCount()) {
+                entity.setItem(leftover);
+            }
+        }
 
         notifications.forEach((id, stacks) -> {
             ServerPlayer recipient = level.getServer().getPlayerList().getPlayer(id);
@@ -157,6 +153,75 @@ public final class DropEvents {
                 InsertNotifier.send(recipient, stacks);
             }
         });
+    }
+
+    /**
+     * Splits one source stack across the distribution's recipients through the
+     * insertion funnel and returns the first leftover (empty when everything
+     * landed). Party-overflow leftovers that do not fit their recipient spawn
+     * as fresh entities at the source position, so nothing is ever destroyed.
+     */
+    private static ItemStack distributeStack(
+            Distribution distribution,
+            ServerLevel level,
+            PartyAmount amount,
+            Map<UUID, List<ItemStack>> notifications,
+            Vec3 sourcePosition,
+            ItemStack stack) {
+        int[] shares = PartyLootRules.distribute(
+                stack.getCount(),
+                distribution.recipients().size(),
+                distribution.primaryIndex(),
+                amount);
+        List<ItemStack> leftovers = new ArrayList<>();
+        for (int i = 0; i < shares.length; i++) {
+            if (shares[i] <= 0) {
+                continue;
+            }
+            ItemStack share = stack.copy();
+            share.setCount(shares[i]);
+            ItemStack leftover = DropInserter.insert(
+                    distribution.players().get(i),
+                    share,
+                    notifications.get(distribution.recipients().get(i)));
+            if (!leftover.isEmpty()) {
+                leftovers.add(leftover);
+            }
+        }
+        if (leftovers.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        for (int i = 1; i < leftovers.size(); i++) {
+            level.addFreshEntity(new ItemEntity(
+                    level, sourcePosition.x, sourcePosition.y, sourcePosition.z, leftovers.get(i)));
+        }
+        return leftovers.get(0);
+    }
+
+    /**
+     * Coin entities spawned at the victim during this kill (issue #11):
+     * Lightman's Currency drops mob coins itself on LivingDeathEvent, which
+     * fires before this event, so they exist only in the world. Only coins
+     * spawned this tick are taken - older ground coins belong to vanilla
+     * pickup (and Lightman's Currency's own wallet divert) - and only while
+     * Lightman's Currency is loaded, so its absence changes nothing.
+     */
+    private static List<ItemEntity> collectFreshCoins(ServerLevel level, LivingEntity victim) {
+        if (!ModList.get().isLoaded("lightmanscurrency")) {
+            return List.of();
+        }
+        List<ItemEntity> fresh = new ArrayList<>();
+        AABB aroundVictim = new AABB(victim.position(), victim.position()).inflate(2.0);
+        for (ItemEntity entity : level.getEntitiesOfClass(ItemEntity.class, aroundVictim)) {
+            if (entity.getAge() != 0) {
+                continue;
+            }
+            ItemStack stack = entity.getItem();
+            if (!stack.isEmpty() && LightmansCurrencyIntegration.isCoinAllowed(stack)) {
+                fresh.add(entity);
+            }
+        }
+        return fresh;
     }
 
     @SubscribeEvent
