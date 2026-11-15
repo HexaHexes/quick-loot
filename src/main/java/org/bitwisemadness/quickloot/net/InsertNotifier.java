@@ -28,7 +28,7 @@ public final class InsertNotifier {
         player.connection.send(new InsertedPayload(List.copyOf(stacks), xp));
     }
 
-    /** Server: stacks-only notification (quick deposit, no experience involved). */
+    /** Server: stacks-only notification (no experience involved). */
     public static void send(ServerPlayer player, List<ItemStack> stacks) {
         send(player, stacks, 0);
     }

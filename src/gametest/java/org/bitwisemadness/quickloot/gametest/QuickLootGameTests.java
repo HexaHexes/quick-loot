@@ -7,26 +7,19 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.inventory.ShulkerBoxMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
@@ -37,11 +30,6 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import net.neoforged.neoforge.network.connection.ConnectionType;
 import org.bitwisemadness.quickloot.QuickLoot;
 import org.bitwisemadness.quickloot.config.QuickLootConfig;
-import org.bitwisemadness.quickloot.container.DepositScope;
-import org.bitwisemadness.quickloot.container.LootContainerLatches;
-import org.bitwisemadness.quickloot.container.LootEvidence;
-import org.bitwisemadness.quickloot.container.MenuWhitelist;
-import org.bitwisemadness.quickloot.container.QuickDeposit;
 import org.bitwisemadness.quickloot.loot.DropEvents;
 import org.bitwisemadness.quickloot.net.InsertedPayload;
 import org.bitwisemadness.quickloot.party.PartyAmount;
@@ -54,8 +42,8 @@ import org.bitwisemadness.quickloot.party.ResolvedParty;
 /**
  * GameTests for the drop pipeline: real block breaks through the event bus,
  * constructed drop/XP events through the GameTest seams, party distribution
- * with a fabricated membership source, the quick-deposit validation chain, the
- * notification payload, and the staged party adapters.
+ * with a fabricated membership source, the notification payload, and the
+ * staged party adapters.
  *
  * <p>Every test runs synchronously inside one method invocation on the server
  * thread, so config flips and gamerule changes are atomic here - each test
@@ -461,209 +449,6 @@ public final class QuickLootGameTests {
         } finally {
             config.partyLootRule.set(wasRule);
             config.partyLootAmount.set(wasAmount);
-        }
-        helper.succeed();
-    }
-
-    /**
-     * The quick-deposit validation chain, in gate order: the config toggle, the
-     * LOOT_ONLY evidence scope, and the menu whitelist each refuse on their
-     * own; once latched, eligible stacks move (merging into a full stack's
-     * siblings, refusing novel items, and landing beside a full stack as a
-     * fresh one) regardless of the backpack spill setting; ALL_CONTAINERS is
-     * the documented escape hatch for an unlatched chest; a live loot table
-     * counts as evidence on its own.
-     */
-    @GameTest(template = "empty")
-    public static void depositValidationChain(GameTestHelper helper) {
-        ServerPlayer player = TestSupport.join(helper, "depositor");
-        var level = helper.getLevel();
-        var server = level.getServer();
-        BlockPos origin = helper.absolutePos(BlockPos.ZERO);
-        helper.setBlock(BlockPos.ZERO, Blocks.CHEST);
-        ChestBlockEntity chest = helper.getBlockEntity(BlockPos.ZERO);
-        chest.setItem(0, new ItemStack(Items.DIAMOND, 10));
-        chest.setItem(1, new ItemStack(Items.EMERALD, 32));
-        chest.setItem(2, new ItemStack(Items.IRON_INGOT, 10));
-        player.getInventory().items.set(0, new ItemStack(Items.DIAMOND, 20));
-        player.getInventory().items.set(1, new ItemStack(Items.IRON_INGOT, 64));
-        var menu = ChestMenu.threeRows(100, player.getInventory(), chest);
-
-        var config = QuickLootConfig.SERVER;
-        boolean wasEnabled = config.quickDeposit.get();
-        var wasScope = config.quickDepositScope.get();
-        boolean wasBackpacks = config.useBackpacks.get();
-        try {
-            config.quickDeposit.set(false);
-            player.containerMenu = menu;
-            QuickDeposit.run(player);
-            TestSupport.check(chest.getItem(0).getCount() == 10, "quickDeposit off: nothing moves");
-
-            config.quickDeposit.set(true);
-            QuickDeposit.run(player);
-            TestSupport.check(chest.getItem(0).getCount() == 10,
-                    "LOOT_ONLY without evidence: nothing moves");
-
-            player.containerMenu = player.inventoryMenu;
-            QuickDeposit.run(player);
-            TestSupport.check(chest.getItem(0).getCount() == 10, "a non-whitelisted menu refuses");
-            TestSupport.check(!MenuWhitelist.isWhitelisted(player.inventoryMenu),
-                    "the inventory menu must be off the whitelist");
-            TestSupport.check(MenuWhitelist.isWhitelisted(menu), "the chest menu must be on the whitelist");
-
-            LootContainerLatches.latch(server, level.dimension(), origin);
-            config.useBackpacks.set(false);
-            player.containerMenu = menu;
-            QuickDeposit.run(player);
-            TestSupport.check(chest.getItem(0).isEmpty(), "merge: the chest's diamonds must move");
-            TestSupport.check(TestSupport.countItem(player, Items.DIAMOND) == 30,
-                    "merge: 20 + 10 diamonds in one stack");
-            TestSupport.check(chest.getItem(1).getCount() == 32,
-                    "novel: emeralds the player carries nowhere must stay");
-            TestSupport.check(TestSupport.countItem(player, Items.EMERALD) == 0,
-                    "novel: no emeralds may appear");
-            TestSupport.check(chest.getItem(2).isEmpty(),
-                    "full existing stack still qualifies - the iron must move");
-            TestSupport.check(TestSupport.countItem(player, Items.IRON_INGOT) == 74,
-                    "64 + 10 iron: a fresh stack beside the full one");
-            config.useBackpacks.set(wasBackpacks);
-
-            helper.setBlock(new BlockPos(1, 0, 0), Blocks.CHEST);
-            ChestBlockEntity escapeHatch = helper.getBlockEntity(new BlockPos(1, 0, 0));
-            escapeHatch.setItem(0, new ItemStack(Items.DIAMOND, 5));
-            var escapeMenu = ChestMenu.threeRows(101, player.getInventory(), escapeHatch);
-            config.quickDepositScope.set(DepositScope.ALL_CONTAINERS);
-            player.containerMenu = escapeMenu;
-            QuickDeposit.run(player);
-            TestSupport.check(escapeHatch.getItem(0).isEmpty(),
-                    "ALL_CONTAINERS: an unlatched chest must deposit");
-            TestSupport.check(TestSupport.countItem(player, Items.DIAMOND) == 35, "30 + 5 diamonds");
-
-            config.quickDepositScope.set(DepositScope.LOOT_ONLY);
-            helper.setBlock(new BlockPos(2, 0, 0), Blocks.CHEST);
-            ChestBlockEntity observed = helper.getBlockEntity(new BlockPos(2, 0, 0));
-            TestSupport.check(!LootEvidence.hasEvidence(observed),
-                    "an ordinary chest has no evidence under LOOT_ONLY");
-            observed.setLootTable(ResourceKey.create(Registries.LOOT_TABLE,
-                    ResourceLocation.fromNamespaceAndPath("quick_loot", "chest")));
-            TestSupport.check(LootEvidence.hasEvidence(observed),
-                    "a live loot table must count as evidence on its own");
-        } finally {
-            config.quickDeposit.set(wasEnabled);
-            config.quickDepositScope.set(wasScope);
-            config.useBackpacks.set(wasBackpacks);
-        }
-        helper.succeed();
-    }
-
-    /**
-     * The deposit eligibility rule has its own server key (issue #13): with
-     * {@code quickDeposit.requireCarried} off, a stack the player carries
-     * nowhere still moves; the default keeps the novel stack put.
-     */
-    @GameTest(template = "empty")
-    public static void requireCarriedOffDepositsNovelStacks(GameTestHelper helper) {
-        ServerPlayer player = TestSupport.join(helper, "carry-off");
-        helper.setBlock(BlockPos.ZERO, Blocks.CHEST);
-        ChestBlockEntity chest = helper.getBlockEntity(BlockPos.ZERO);
-        chest.setItem(0, new ItemStack(Items.EMERALD, 16));
-        player.getInventory().items.set(0, new ItemStack(Items.DIAMOND, 5));
-        var menu = ChestMenu.threeRows(100, player.getInventory(), chest);
-
-        var config = QuickLootConfig.SERVER;
-        boolean wasDeposit = config.quickDeposit.get();
-        var wasScope = config.quickDepositScope.get();
-        boolean wasCarried = config.requireCarried.get();
-        boolean wasBackpacks = config.useBackpacks.get();
-        try {
-            config.quickDeposit.set(true);
-            config.quickDepositScope.set(DepositScope.ALL_CONTAINERS);
-            config.useBackpacks.set(false);
-            player.containerMenu = menu;
-
-            QuickDeposit.run(player);
-            TestSupport.check(chest.getItem(0).getCount() == 16,
-                    "requireCarried on: a novel stack must stay");
-            TestSupport.check(TestSupport.countItem(player, Items.EMERALD) == 0,
-                    "requireCarried on: no emeralds may appear");
-
-            config.requireCarried.set(false);
-            QuickDeposit.run(player);
-            TestSupport.check(chest.getItem(0).isEmpty(),
-                    "requireCarried off: the novel stack must move");
-            TestSupport.check(TestSupport.countItem(player, Items.EMERALD) == 16,
-                    "requireCarried off: the emeralds land in the inventory");
-        } finally {
-            config.quickDeposit.set(wasDeposit);
-            config.quickDepositScope.set(wasScope);
-            config.requireCarried.set(wasCarried);
-            config.useBackpacks.set(wasBackpacks);
-        }
-        helper.succeed();
-    }
-
-    /**
-     * The quick-insert menu whitelist is a server config (issue #13): the
-     * list filters {@link MenuWhitelist#containerOf} itself, so a chest is
-     * refused - button gate and server validation alike - while it is off
-     * the list, and a listed shulker menu works throughout. NeoForge syncs
-     * SERVER configs to clients at login, so the button reads the same
-     * values with no whitelist payload of our own.
-     */
-    @GameTest(template = "empty")
-    public static void menuListGatesChestMenus(GameTestHelper helper) {
-        ServerPlayer player = TestSupport.join(helper, "menu-list");
-        helper.setBlock(BlockPos.ZERO, Blocks.CHEST);
-        ChestBlockEntity chest = helper.getBlockEntity(BlockPos.ZERO);
-        chest.setItem(0, new ItemStack(Items.DIAMOND, 10));
-        player.getInventory().items.set(0, new ItemStack(Items.DIAMOND, 20));
-        var chestMenu = ChestMenu.threeRows(100, player.getInventory(), chest);
-
-        var shulkerContents = new SimpleContainer(27);
-        shulkerContents.setItem(0, new ItemStack(Items.DIAMOND, 5));
-        var shulkerMenu = new ShulkerBoxMenu(101, player.getInventory(), shulkerContents);
-
-        var config = QuickLootConfig.SERVER;
-        boolean wasDeposit = config.quickDeposit.get();
-        var wasScope = config.quickDepositScope.get();
-        boolean wasBackpacks = config.useBackpacks.get();
-        var wasMenus = config.quickDepositMenus.get();
-        try {
-            config.quickDeposit.set(true);
-            config.quickDepositScope.set(DepositScope.ALL_CONTAINERS);
-            config.useBackpacks.set(false);
-
-            config.quickDepositMenus.set(List.of("shulker"));
-            TestSupport.check(!MenuWhitelist.isWhitelisted(chestMenu),
-                    "chest off the list: the button gate must refuse");
-            TestSupport.check(MenuWhitelist.isWhitelisted(shulkerMenu),
-                    "shulker on the list: must stay allowed");
-            player.containerMenu = chestMenu;
-            QuickDeposit.run(player);
-            TestSupport.check(chest.getItem(0).getCount() == 10,
-                    "chest off the list: the server must refuse the click");
-
-            config.quickDepositMenus.set(List.of("chest"));
-            TestSupport.check(MenuWhitelist.isWhitelisted(chestMenu),
-                    "chest back on the list: accepted again");
-            QuickDeposit.run(player);
-            TestSupport.check(chest.getItem(0).isEmpty(),
-                    "chest on the list: the deposit must move");
-            TestSupport.check(TestSupport.countItem(player, Items.DIAMOND) == 30,
-                    "20 carried + 10 deposited");
-
-            config.quickDepositMenus.set(List.of("shulker"));
-            player.containerMenu = shulkerMenu;
-            QuickDeposit.run(player);
-            TestSupport.check(shulkerContents.getItem(0).isEmpty(),
-                    "shulker on the list: its contents must move");
-            TestSupport.check(TestSupport.countItem(player, Items.DIAMOND) == 35,
-                    "30 + 5 from the shulker");
-        } finally {
-            config.quickDeposit.set(wasDeposit);
-            config.quickDepositScope.set(wasScope);
-            config.useBackpacks.set(wasBackpacks);
-            config.quickDepositMenus.set(wasMenus);
         }
         helper.succeed();
     }

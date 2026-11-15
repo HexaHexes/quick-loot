@@ -13,12 +13,9 @@ import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
@@ -29,8 +26,6 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import org.bitwisemadness.quickloot.QuickLoot;
 import org.bitwisemadness.quickloot.compat.LightmansCurrencyIntegration;
 import org.bitwisemadness.quickloot.config.QuickLootConfig;
-import org.bitwisemadness.quickloot.container.LootContainerLatches;
-import org.bitwisemadness.quickloot.container.QuickDeposit;
 import org.bitwisemadness.quickloot.loot.DropEvents;
 import org.bitwisemadness.quickloot.loot.DropInserter;
 import org.bitwisemadness.quickloot.loot.WalletCoinObserver;
@@ -58,7 +53,7 @@ public final class LightmansCurrencyGameTests {
      * With a wallet equipped every coin stack routed through the insertion
      * funnel lands in the wallet at exactly its value, never self-notifies
      * (the observer owns wallet toasts), never leaks into the inventory -
-     * and non-coins plus quick-deposit coins keep their own paths.
+     * and non-coins keep their own path.
      */
     @GameTest(template = "empty")
     public static void walletRoutingTakesCoinsBeforeInventory(GameTestHelper helper) {
@@ -92,26 +87,6 @@ public final class LightmansCurrencyGameTests {
                 "the diamonds land in the inventory");
         TestSupport.check(LightmansCurrencyIntegration.walletTotal(player) - before == expected,
                 "the wallet is untouched by non-coins");
-
-        // Quick-deposit rides the same funnel: chest coins go to the wallet,
-        // while the player's loose coin (the eligibility evidence) stays put.
-        var level = helper.getLevel();
-        helper.setBlock(BlockPos.ZERO, Blocks.CHEST);
-        ChestBlockEntity chest = helper.getBlockEntity(BlockPos.ZERO);
-        var chestCoins = new ItemStack(ModItems.COIN_COPPER.get(), 3);
-        chest.setItem(0, chestCoins);
-        long chestValue = valueOf(chestCoins);
-        player.getInventory().items.set(0, new ItemStack(ModItems.COIN_COPPER.get(), 1));
-        LootContainerLatches.latch(level.getServer(), level.dimension(),
-                helper.absolutePos(BlockPos.ZERO));
-        player.containerMenu = ChestMenu.threeRows(300, player.getInventory(), chest);
-        long beforeDeposit = LightmansCurrencyIntegration.walletTotal(player);
-        QuickDeposit.run(player);
-        TestSupport.check(chest.getItem(0).isEmpty(), "the chest's coins must move");
-        TestSupport.check(LightmansCurrencyIntegration.walletTotal(player) - beforeDeposit == chestValue,
-                "quick-deposit coins land in the wallet at exactly their value");
-        TestSupport.check(TestSupport.countItem(player, ModItems.COIN_COPPER.get()) == 1,
-                "only the player's original loose coin stays in the inventory");
         helper.succeed();
     }
 

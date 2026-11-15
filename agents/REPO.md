@@ -11,10 +11,10 @@ restating them.
 
 Inserts mob and block drops straight into the player's inventory (with
 Sophisticated Backpacks overflow), awards the accompanying experience directly
-instead of spawning orbs, adds a server-validated quick-insert button on loot
-containers, shares kill loot among party members, and routes Lightman's Currency
-coins into the player's equipped wallet — with Loot Journal pickup notifications
-for everything that lands, including every wallet insert.
+instead of spawning orbs, shares kill loot among party members, and routes
+Lightman's Currency coins into the player's equipped wallet — with Loot
+Journal pickup notifications for everything that lands, including every
+wallet insert.
 
 **Dependencies**
 - Required: Minecraft, NeoForge.
@@ -27,11 +27,10 @@ for everything that lands, including every wallet insert.
   import their packages.
 
 **Test:** `./gradlew runGameTestServer` — `QuickLootGameTests` +
-`LightmansCurrencyGameTests` + `SophisticatedBackpackGameTests` (28 tests).
-`expectedTests = 28` in `build.gradle`
+`LightmansCurrencyGameTests` + `SophisticatedBackpackGameTests` (25 tests).
+`expectedTests = 25` in `build.gradle`
 must match the `@GameTest` count. JUnit (`src/test`) covers the pure party
-matrix and pure config types; GameTests cover everything that needs a live
-server.
+matrix; GameTests cover everything that needs a live server.
 
 **Gotchas**
 - **Never cancel a drop event** — mutate instead: remove absorbed `ItemEntity`s
@@ -46,7 +45,7 @@ server.
   (killed entity, killer UUID). Do not clear it on read; a killer mismatch must
   resolve fresh.
 - **Single insert funnel**: every path (mob drops, block drops, party shares,
-  quick-deposit, wallet routing) goes through `DropInserter.insert` in wallet →
+  wallet routing) goes through `DropInserter.insert` in wallet →
   backpack → inventory order. The backpack stage is Sophisticated Backpacks'
   own `InventoryHelper.runPickupOnPickupResponseUpgrades` chain (issue #7):
   only a Pickup / Advanced Pickup / Magnet / Advanced Magnet upgrade claims
@@ -72,8 +71,7 @@ server.
 - **Payload types**: build `CustomPacketPayload.Type` with
   `ResourceLocation.fromNamespaceAndPath(MOD_ID, ...)` - `createType(String)` is
   minecraft-namespaced and crashes the server at registration (first boot caught
-  this). Channel ids: `quick_loot:inserted`, `quick_loot:container_flag`,
-  `quick_loot:quick_deposit`.
+  this). Channel id: `quick_loot:inserted`.
 - **Channels register optional** (`event.registrar("1").optional()`): a
   *required* channel makes NeoForge's negotiation disconnect any client that
   lacks it - vanilla or a modded client without this mod - so required
@@ -81,41 +79,26 @@ server.
   channels are disabled for those clients instead (NeoForge's own built-ins
   register the same way), and clientbound payloads are only ever delivered to
   clients that negotiated the channel. Clients without the mod get the full
-  gameplay but no button and no Loot Journal toast; never flip this back to
+  gameplay but no Loot Journal toast; never flip this back to
   required.
 - **Visibility discipline**: helpers stay package-private unless a test seam
-  forces otherwise (`XpAwards` is package-private; `LootContainerLatches.load` /
-  `forLevel` are deliberately *not* widened — NBT round-trip is covered by the
-  `InsertedPayload` STREAM_CODEC test instead). The GameTest seams are the
+  forces otherwise (`XpAwards` is package-private). The GameTest seams are the
   `handleLivingDrops` / `handleLivingXpDrop` / `handleBlockDrops` bridge overloads
   and `WalletCoinObserver.capture`.
-- **Menu whitelist lockstep** (issue #13): the client button gate and the
-  server's `QuickDeposit.run` validation must both go through
-  `MenuWhitelist.containerOf` (Chest / Shulker / Hopper / Dispenser) - never
-  a direct `instanceof` - because the `quickDeposit.menus` config check folds
-  into that one method. NeoForge syncs SERVER configs to the client during
-  login (`net.neoforged.neoforge.network.ConfigSync` reads
-  `ModConfigs.getConfigSet(Type.SERVER)`), so both sides read the same value
-  with no whitelist payload of our own; a modded client on an unmodded server
-  falls back to local defaults, which the server still revalidates. Evidence
-  is a separate latch (`LootContainerLatches`) on top: `getLootTable()` nulls
-  on first open; `ALL_CONTAINERS` is the escape hatch.
 - **One behaviour, one server key** (issue #13): every gameplay axis has its
   own SERVER-spec key - items (`mobDrops`/`blockDrops`) and XP
-  (`mobExperience`/`blockExperience`) are independent pairs, the LC death-coin
-  scoop is `lightmansCoins` (AND-gated under `mobDrops`, never alone), and
-  deposit has `requireCarried` + `menus`. New behaviour gets a new key with a
-  behaviour-neutral default; never fold one axis into another's toggle. Pure
-  config types (e.g. `DepositMenuKind`) stay free of Minecraft imports so the
-  JUnit suite can pin them.
+  (`mobExperience`/`blockExperience`) are independent pairs, and the LC
+  death-coin scoop is `lightmansCoins` (AND-gated under `mobDrops`, never
+  alone). New behaviour gets a new key with a behaviour-neutral default;
+  never fold one axis into another's toggle.
 - **Config reads need a loaded spec** (issue #17): `ScreenEvent.Init.Post`
   fires from `Minecraft.<init>` *before* `ConfigTracker.loadConfigs`, and an
   unloaded `ConfigValue.get()` throws `IllegalStateException` straight
   through the event bus. Any handler that can run pre-load must do its
   structural checks first and gate config reads on `SPEC.isLoaded()`;
   in-world handlers (drops, ticks, interactions) run long after config load
-  and need no guard. Current pre-load surface: `QuickDepositButtonHook` only -
-  audit any new client screen/network handler against this rule.
+  and need no guard. No pre-load surface remains (the quick-insert button hook
+  went with the feature, issue #19) - audit any new client handler against this rule.
 - **Party source AUTO order**: Better Party → OPaC → FTB Teams. OPaC's adapter
   prefers owner-then-uuid order; FTB filters to party-type teams only.
 - **GameTest harness** (`src/gametest`): mock players join through the real

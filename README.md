@@ -6,15 +6,13 @@ and the loot is already yours, and a mined vein fills your slots while the
 experience bar fills with no orb in sight.
 
 Carried Sophisticated Backpacks can claim loot through their pickup upgrades,
-loot containers get a one-click deposit button, party kills can be shared or
-rotated, and with Lightman's Currency installed your coins go into the
-equipped wallet rather than clogging the inventory.
+party kills can be shared or rotated, and with Lightman's Currency installed
+your coins go into the equipped wallet rather than clogging the inventory.
 
 The mod is server-authoritative: players do not need it installed to join or
 to receive any of the gameplay - a server running Quick: Loot! inserts loot,
 awards experience and shares party kills for everyone connected. Only the
-quick-insert button and the Loot Journal pickup notifications need the mod on
-the client.
+Loot Journal pickup notifications need the mod on the client.
 
 ## What it does
 
@@ -34,10 +32,6 @@ the client.
   mending repairs first and all. Loot Journal still shows the pickup
   notification, and turning the config gates off restores vanilla drops and
   orbs completely.
-- **A quick-insert button on loot containers.** Chests, shulker boxes, hoppers
-  and dispensers the server has actually seen loot in get a button that empties
-  them into your inventory in one click, and only for stacks you already carry.
-  A config scope widens it to any container if you want that.
 - **Party loot.** Kills shared with a party can go to the killing blow (the
   default), rotate one member per kill, or split every kill, either as a full
   copy per member or divided evenly with remainders to the primary. Block drops
@@ -85,11 +79,6 @@ in-game with Configured installed.
 | `drops.useBackpacks` | `true` | Spill overflow into carried Sophisticated Backpacks |
 | `drops.coinsToWallet` | `true` | Route Lightman's Currency coins into the equipped wallet on every insert path |
 | `drops.lootJournalNotify` | `true` | Send inserted stacks and awarded experience to Loot Journal |
-| `quickDeposit.enabled` | `true` | Allow the quick-insert button; the server validates every click |
-| `quickDeposit.scope` | `LOOT_ONLY` | `LOOT_ONLY` shows the button only on containers the server has seen loot in, `ALL_CONTAINERS` on any whitelisted container |
-| `quickDeposit.requireCarried` | `true` | Only deposit a stack the player already carries (inventory or backpack) |
-| `quickDeposit.menus` | `chest, shulker, hopper, dispenser` | Which container screens offer the quick-insert button |
-| `showQuickDepositButton` | `true` | Client-side display of the quick-insert button |
 | `party.enabled` | `true` | Distribute kill loot among party members |
 | `party.source` | `AUTO` | Party membership source; `AUTO` tries Better Party, then Open Parties and Claims, then FTB Teams |
 | `party.lootRule` | `KILLING_BLOW` | Who receives loot (see the matrix above) |
