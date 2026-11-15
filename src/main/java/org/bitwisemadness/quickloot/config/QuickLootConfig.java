@@ -1,35 +1,25 @@
 package org.bitwisemadness.quickloot.config;
 
-import java.util.List;
 import net.neoforged.neoforge.common.ModConfigSpec;
-import org.bitwisemadness.quickloot.container.DepositMenuKind;
-import org.bitwisemadness.quickloot.container.DepositScope;
 import org.bitwisemadness.quickloot.party.PartyAmount;
 import org.bitwisemadness.quickloot.party.PartyRule;
 import org.bitwisemadness.quickloot.party.PartySource;
 
 /**
- * Server and client config specs.
+ * The server config spec.
  *
  * <p>Every default keeps install-with-defaults behaviour equivalent to vanilla
- * plus straight insertion: party sharing inert (killing-blow + owner-only) and
- * the deposit gated to proven loot containers.</p>
+ * plus straight insertion: party sharing inert (killing-blow + owner-only).</p>
  */
 public final class QuickLootConfig {
 
     public static final Server SERVER;
     public static final ModConfigSpec SERVER_SPEC;
-    public static final Client CLIENT;
-    public static final ModConfigSpec CLIENT_SPEC;
 
     static {
         ModConfigSpec.Builder serverBuilder = new ModConfigSpec.Builder();
         SERVER = new Server(serverBuilder);
         SERVER_SPEC = serverBuilder.build();
-
-        ModConfigSpec.Builder clientBuilder = new ModConfigSpec.Builder();
-        CLIENT = new Client(clientBuilder);
-        CLIENT_SPEC = clientBuilder.build();
     }
 
     private QuickLootConfig() {
@@ -47,10 +37,6 @@ public final class QuickLootConfig {
         public final ModConfigSpec.BooleanValue useBackpacks;
         public final ModConfigSpec.BooleanValue coinsToWallet;
         public final ModConfigSpec.BooleanValue lootJournalNotify;
-        public final ModConfigSpec.BooleanValue quickDeposit;
-        public final ModConfigSpec.EnumValue<DepositScope> quickDepositScope;
-        public final ModConfigSpec.BooleanValue requireCarried;
-        public final ModConfigSpec.ConfigValue<List<? extends String>> quickDepositMenus;
         public final ModConfigSpec.BooleanValue partyEnabled;
         public final ModConfigSpec.EnumValue<PartySource> partySource;
         public final ModConfigSpec.EnumValue<PartyRule> partyLootRule;
@@ -87,22 +73,6 @@ public final class QuickLootConfig {
                     .define("lootJournalNotify", true);
             builder.pop();
 
-            builder.push("quickDeposit");
-            quickDeposit = builder.comment(
-                    "Allow the quick-insert button to deposit loot container contents (server-side validation of every click).")
-                    .define("enabled", true);
-            quickDepositScope = builder.comment(
-                    "LOOT_ONLY: only containers the server has seen a loot table on (latched across reopens). ALL_CONTAINERS: any whitelisted block container, player storage included.")
-                    .defineEnum("scope", DepositScope.LOOT_ONLY);
-            requireCarried = builder.comment(
-                    "Only move a container stack when the same item already exists in the player's 36 main inventory slots or a carried backpack (the gate against depositing items the player has never held). Off allows depositing any stack in the container.")
-                    .define("requireCarried", true);
-            quickDepositMenus = builder.comment(
-                    "Which container screens accept the quick-insert button and its clicks: chest (chests, trapped chests, barrels), shulker, hopper, dispenser. Unknown names are rejected when the config loads; an empty list disables the button everywhere.")
-                    .defineListAllowEmpty(
-                            "menus", DepositMenuKind.defaultNames(), DepositMenuKind::isValidName);
-            builder.pop();
-
             builder.push("party");
             partyEnabled = builder.comment(
                     "Distribute mob loot among party members. With lootRule = KILLING_BLOW the behaviour is identical to solo play.")
@@ -117,18 +87,6 @@ public final class QuickLootConfig {
                     "How much each recipient gets: OWNER_ONLY = the primary recipient only; FULL_TO_ALL = a full copy per recipient (duplicates by design); SPLIT_EQUALLY = divide stacks, remainders to the primary first.")
                     .defineEnum("lootAmount", PartyAmount.OWNER_ONLY);
             builder.pop();
-        }
-    }
-
-    /** CLIENT: display-only values; the server never reads them. */
-    public static final class Client {
-
-        public final ModConfigSpec.BooleanValue showQuickDepositButton;
-
-        private Client(ModConfigSpec.Builder builder) {
-            showQuickDepositButton = builder.comment(
-                    "Show the quick-insert button on loot container screens.")
-                    .define("showQuickDepositButton", true);
         }
     }
 }

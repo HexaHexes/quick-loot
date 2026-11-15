@@ -47,8 +47,6 @@ final class TestSupport {
     private static final String[] AD_HOC_CHANNELS = {
             // ours: notification payloads sent by the code under test
             "quick_loot:inserted",
-            "quick_loot:container_flag",
-            "quick_loot:quick_deposit",
             // neoforge login syncs
             "neoforge:advanced_open_screen",
             "neoforge:sync_attachments",
