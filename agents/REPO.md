@@ -108,6 +108,14 @@ server.
   behaviour-neutral default; never fold one axis into another's toggle. Pure
   config types (e.g. `DepositMenuKind`) stay free of Minecraft imports so the
   JUnit suite can pin them.
+- **Config reads need a loaded spec** (issue #17): `ScreenEvent.Init.Post`
+  fires from `Minecraft.<init>` *before* `ConfigTracker.loadConfigs`, and an
+  unloaded `ConfigValue.get()` throws `IllegalStateException` straight
+  through the event bus. Any handler that can run pre-load must do its
+  structural checks first and gate config reads on `SPEC.isLoaded()`;
+  in-world handlers (drops, ticks, interactions) run long after config load
+  and need no guard. Current pre-load surface: `QuickDepositButtonHook` only -
+  audit any new client screen/network handler against this rule.
 - **Party source AUTO order**: Better Party → OPaC → FTB Teams. OPaC's adapter
   prefers owner-then-uuid order; FTB filters to party-type teams only.
 - **GameTest harness** (`src/gametest`): mock players join through the real

@@ -29,6 +29,13 @@ import org.bitwisemadness.quickloot.net.QuickDepositPayload;
  * modded client on an unmodded or {@code LOOT_ONLY} server never shows a dead
  * button.</p>
  *
+ * <p>Order matters (issue #17): the structural screen check runs before any
+ * config read, and the read is guarded by {@code CLIENT_SPEC.isLoaded()}.
+ * Screen init can fire from {@code Minecraft.<init>} while mod-loading
+ * workers are still registering configs, and reading an unloaded spec
+ * throws; no container screen opens that early, so both guards are no-ops
+ * in play.</p>
+ *
  * <p>Placement: a small Lightman's-style column to the right of the container,
  * clamped inside the screen at any GUI scale.</p>
  */
@@ -40,11 +47,17 @@ public final class QuickDepositButtonHook {
 
     @SubscribeEvent
     public static void onScreenInit(ScreenEvent.Init.Post event) {
-        if (!QuickLootConfig.CLIENT.showQuickDepositButton.get()) {
-            return;
-        }
         Screen screen = event.getScreen();
         if (!(screen instanceof AbstractContainerScreen<?> containerScreen)) {
+            return;
+        }
+        if (!QuickLootConfig.CLIENT_SPEC.isLoaded()) {
+            // Screen init can run during Minecraft.<init>, before ConfigTracker
+            // loads the client config. No container screen opens that early, so
+            // skipping is safe; the server re-checks every click regardless.
+            return;
+        }
+        if (!QuickLootConfig.CLIENT.showQuickDepositButton.get()) {
             return;
         }
         Container container = MenuWhitelist.containerOf(containerScreen.getMenu());
