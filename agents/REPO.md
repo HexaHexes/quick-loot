@@ -24,13 +24,17 @@ wallet insert.
   Each mod's types live in exactly one adapter class behind `ModList.isLoaded`
   (`compat/BackpackIntegration`, `compat/LightmansCurrencyIntegration`,
   `client/LootJournalClientIntegration`, `party/*Adapter`); nothing else may
-  import their packages.
+  import their packages. Better Party's *client* API is the one exception:
+  `client/BetterPartySettingsPage` and `client/PartyLootSettingsScreen` (its
+  party-leader settings page, issue #21) may import `dev.betterparty` client
+  types - and nothing else may.
 
 **Test:** `./gradlew runGameTestServer` — `QuickLootGameTests` +
-`LightmansCurrencyGameTests` + `SophisticatedBackpackGameTests` (25 tests).
-`expectedTests = 25` in `build.gradle`
+`LightmansCurrencyGameTests` + `SophisticatedBackpackGameTests` (27 tests).
+`expectedTests = 27` in `build.gradle`
 must match the `@GameTest` count. JUnit (`src/test`) covers the pure party
-matrix; GameTests cover everything that needs a live server.
+matrix and the override parser; GameTests cover everything that needs a
+live server.
 
 **Gotchas**
 - **Never cancel a drop event** — mutate instead: remove absorbed `ItemEntity`s
@@ -101,13 +105,33 @@ matrix; GameTests cover everything that needs a live server.
   went with the feature, issue #19) - audit any new client handler against this rule.
 - **Party source AUTO order**: Better Party → OPaC → FTB Teams. OPaC's adapter
   prefers owner-then-uuid order; FTB filters to party-type teams only.
+- **Per-party settings overrides** (issue #21): effective value = party
+  override, else server config; `enabled` composes as
+  `config AND override` (default `true`), so the config stays the admin
+  master switch and a party can only opt out. Read the RAW overrides map
+  (`PartyBridge.settingOverrides` → Better Party's
+  `partySettingOverrides`, or FTB's team properties), never a "get the
+  setting" convenience API: those return the definition default and cannot
+  distinguish "the party never chose" from "chose the default", which would
+  let property defaults override a reconfigured server. FTB cannot express
+  unset at all, so its property default is the `SERVER_DEFAULT` inherit
+  sentinel that `FtbTeamsAdapter` drops from the map. All three definitions
+  (`quick_loot:enabled`, `quick_loot:loot_rule`, `quick_loot:loot_amount`)
+  register at mod construction behind `isLoaded` on both physical sides -
+  Better Party validates writes against its registry and the client encodes
+  requests with the same definitions - while FTB's properties register on
+  `TeamEvent.COLLECT_PROPERTIES` (fired per team collection, after mod
+  construction). Unparseable stored values fall back to the config, never
+  throw; the resolved `PartyAmount` rides the `Distribution` record so the
+  item and XP paths cannot disagree.
 - **GameTest harness** (`src/gametest`): mock players join through the real
   `placeNewPlayer`, so every payload a staged mod may send at login must be in
   `TestSupport.AD_HOC_CHANNELS` — new misses surface as
   `GameTest join aborted (...)` warnings naming the channel; extend the list from
   the run log. Generated mock names stay ≤ 16 chars (FTB team syncs use
-  username-limited codecs), `run/world` is wiped before every run (persisted
-  parties/teams from a prior run break the next run's joins), and
+  username-limited codecs), party/team state in `run/world` is wiped before
+  every run (persisted parties/teams from a prior run break the next run's
+  joins), and
   `GameTestServerFixes` (gametest source only, never jarred) installs the profile
   cache vanilla's `GameTestServer` omits - OPaC dereferences it at server-about-to
   -start.

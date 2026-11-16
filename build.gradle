@@ -135,6 +135,11 @@ dependencies {
     compileOnly "curse.maven:loot-journal-1120395:${lootJournalFileId}"
     compileOnly "curse.maven:better-party-1610184:${betterPartyFileId}"
     compileOnly "curse.maven:ftb-teams-404468:${ftbTeamsFileId}"
+    // TeamEvent lives in architectury-api (FTB Teams hard-requires it) and
+    // Color4I in ftb-library; both are needed to compile the FTB settings
+    // integration and its GameTest (issue #21).
+    compileOnly "curse.maven:architectury-api-419699:${architecturyFileId}"
+    compileOnly "curse.maven:ftb-library-forge-404465:${ftbLibraryFileId}"
     compileOnly "maven.modrinth:open-parties-and-claims:${opacVersion}"
     compileOnly "curse.maven:lightmans-currency-472521:${lightmansCurrencyFileId}"
 
@@ -188,7 +193,7 @@ tasks.matching { it.name == 'runGameTestServer' }.configureEach {
     // with a fresh world (delete run/world) to roll a new position.
     timeout = java.time.Duration.ofMinutes(10)
 
-    def expectedTests = 25
+    def expectedTests = 27
     doLast {
         def log = file('run/logs/latest.log')
         if (!log.exists()) {

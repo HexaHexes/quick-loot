@@ -31,6 +31,7 @@ import org.bitwisemadness.quickloot.party.PartyBridgeRegistry;
 import org.bitwisemadness.quickloot.party.PartyLootRules;
 import org.bitwisemadness.quickloot.party.PartyRotation;
 import org.bitwisemadness.quickloot.party.PartyRule;
+import org.bitwisemadness.quickloot.party.PartySettingOverrides;
 import org.bitwisemadness.quickloot.party.ResolvedParty;
 
 /**
@@ -117,7 +118,7 @@ public final class DropEvents {
             return;
         }
 
-        PartyAmount amount = config.partyLootAmount.get();
+        PartyAmount amount = distribution.amount();
         Map<UUID, List<ItemStack>> notifications = new LinkedHashMap<>();
         for (UUID id : distribution.recipients()) {
             notifications.put(id, new ArrayList<>());
@@ -263,7 +264,7 @@ public final class DropEvents {
                 xp,
                 distribution.recipients().size(),
                 distribution.primaryIndex(),
-                config.partyLootAmount.get());
+                distribution.amount());
         for (int i = 0; i < shares.length; i++) {
             if (shares[i] <= 0) {
                 continue;
@@ -363,35 +364,51 @@ public final class DropEvents {
     private static Distribution resolveDistribution(
             ServerPlayer killer, ServerLevel level, PartyBridge bridge) {
         QuickLootConfig.Server config = QuickLootConfig.SERVER;
-        if (bridge != null && config.partyEnabled.get()) {
+        if (bridge != null) {
             Optional<ResolvedParty> party = bridge.resolve(level.getServer(), killer.getUUID());
             if (party.isPresent() && party.get().members().contains(killer.getUUID())) {
-                List<UUID> eligible = eligibleMembers(level, party.get().members());
-                if (eligible.size() > 1) {
-                    PartyRule rule = config.partyLootRule.get();
-                    // Round robin is the only rule that consumes rotation state.
-                    long counter = rule == PartyRule.ROUND_ROBIN
-                            ? PartyRotation.next(level.getServer(), party.get().id())
-                            : 0L;
-                    List<UUID> recipients = PartyLootRules.recipients(rule, eligible, killer.getUUID(), counter);
-                    List<ServerPlayer> players = new ArrayList<>(recipients.size());
-                    boolean allReachable = true;
-                    for (UUID id : recipients) {
-                        ServerPlayer member = level.getServer().getPlayerList().getPlayer(id);
-                        if (member == null) {
-                            allReachable = false;
-                            break;
+                // Overrides need the party id, so the party resolves before the
+                // enabled gate (issue #21): config AND override, default true -
+                // a party can opt out, never in against a disabled server.
+                Map<String, String> overrides =
+                        bridge.settingOverrides(level.getServer(), party.get().id());
+                boolean enabled = config.partyEnabled.get()
+                        && PartySettingOverrides.enabled(overrides, true);
+                if (enabled) {
+                    List<UUID> eligible = eligibleMembers(level, party.get().members());
+                    if (eligible.size() > 1) {
+                        PartyRule rule = PartySettingOverrides.lootRule(
+                                overrides, config.partyLootRule.get());
+                        PartyAmount amount = PartySettingOverrides.lootAmount(
+                                overrides, config.partyLootAmount.get());
+                        // Round robin is the only rule that consumes rotation state.
+                        long counter = rule == PartyRule.ROUND_ROBIN
+                                ? PartyRotation.next(level.getServer(), party.get().id())
+                                : 0L;
+                        List<UUID> recipients = PartyLootRules.recipients(rule, eligible, killer.getUUID(), counter);
+                        List<ServerPlayer> players = new ArrayList<>(recipients.size());
+                        boolean allReachable = true;
+                        for (UUID id : recipients) {
+                            ServerPlayer member = level.getServer().getPlayerList().getPlayer(id);
+                            if (member == null) {
+                                allReachable = false;
+                                break;
+                            }
+                            players.add(member);
                         }
-                        players.add(member);
-                    }
-                    if (allReachable && !players.isEmpty()) {
-                        return new Distribution(
-                                recipients, players, PartyLootRules.primaryIndex(recipients, killer.getUUID()));
+                        if (allReachable && !players.isEmpty()) {
+                            return new Distribution(
+                                    recipients,
+                                    players,
+                                    PartyLootRules.primaryIndex(recipients, killer.getUUID()),
+                                    amount);
+                        }
                     }
                 }
             }
         }
-        return new Distribution(List.of(killer.getUUID()), List.of(killer), 0);
+        return new Distribution(
+                List.of(killer.getUUID()), List.of(killer), 0, config.partyLootAmount.get());
     }
 
     /** Online members in the killed mob's dimension, in stable party order. */
@@ -408,9 +425,12 @@ public final class DropEvents {
 
     /**
      * One kill's distribution plan: ordered recipients, their resolved players
-     * (parallel list), and the index of the primary recipient for
-     * OWNER_ONLY/remainder rules. Falls back to a solo plan for non-party kills.
+     * (parallel list), the index of the primary recipient for
+     * OWNER_ONLY/remainder rules, and the effective amount matrix (issue #21:
+     * party override else server config - resolved once so the item and XP
+     * paths cannot disagree). Falls back to a solo plan for non-party kills.
      */
-    public record Distribution(List<UUID> recipients, List<ServerPlayer> players, int primaryIndex) {
+    public record Distribution(
+            List<UUID> recipients, List<ServerPlayer> players, int primaryIndex, PartyAmount amount) {
     }
 }

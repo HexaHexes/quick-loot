@@ -1,9 +1,15 @@
 package org.bitwisemadness.quickloot.gametest;
 
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import dev.betterparty.api.v1.settings.BetterPartyAddonSettings;
+import dev.ftb.mods.ftblibrary.icon.Color4I;
+import dev.ftb.mods.ftbteams.api.FTBTeamsAPI;
 import io.netty.buffer.Unpooled;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
@@ -32,10 +38,13 @@ import org.bitwisemadness.quickloot.QuickLoot;
 import org.bitwisemadness.quickloot.config.QuickLootConfig;
 import org.bitwisemadness.quickloot.loot.DropEvents;
 import org.bitwisemadness.quickloot.net.InsertedPayload;
+import org.bitwisemadness.quickloot.party.BetterPartyAdapter;
+import org.bitwisemadness.quickloot.party.FtbTeamsAdapter;
 import org.bitwisemadness.quickloot.party.PartyAmount;
 import org.bitwisemadness.quickloot.party.PartyBridge;
 import org.bitwisemadness.quickloot.party.PartyBridgeRegistry;
 import org.bitwisemadness.quickloot.party.PartyRule;
+import org.bitwisemadness.quickloot.party.PartySettingOverrides;
 import org.bitwisemadness.quickloot.party.PartySource;
 import org.bitwisemadness.quickloot.party.ResolvedParty;
 
@@ -453,6 +462,154 @@ public final class QuickLootGameTests {
         helper.succeed();
     }
 
+    /**
+     * Per-party addon-setting overrides drive distribution while the server
+     * config keeps its install defaults (issue #21): FREE_FOR_ALL +
+     * SPLIT_EQUALLY from the bridge's override map split items AND experience
+     * to both members, an {@code enabled=false} override restores solo even
+     * with {@code party.enabled} on, and the global switch stays the master -
+     * off server-side no override can opt a party back in. Better Party's
+     * settings definitions must already be registered from mod construction.
+     */
+    @GameTest(template = "empty")
+    public static void partyOverridesDriveDistribution(GameTestHelper helper) {
+        ServerPlayer killer = TestSupport.join(helper, "ovr-killer");
+        ServerPlayer member = TestSupport.join(helper, "ovr-member");
+        var config = QuickLootConfig.SERVER;
+        TestSupport.check(config.partyLootRule.get() == PartyRule.KILLING_BLOW
+                        && config.partyLootAmount.get() == PartyAmount.OWNER_ONLY,
+                "the test assumes install-default party rules");
+        boolean wasEnabled = config.partyEnabled.get();
+        try {
+            // Definitions register at mod construction, before any settings
+            // write can reach Better Party's validator (issue #21).
+            TestSupport.check(
+                    BetterPartyAddonSettings.definition(PartySettingOverrides.KEY_ENABLED).isPresent(),
+                    "the enabled definition must be registered");
+            TestSupport.check(
+                    BetterPartyAddonSettings.definition(PartySettingOverrides.KEY_LOOT_RULE).isPresent(),
+                    "the loot-rule definition must be registered");
+            TestSupport.check(
+                    BetterPartyAddonSettings.definition(PartySettingOverrides.KEY_LOOT_AMOUNT).isPresent(),
+                    "the loot-amount definition must be registered");
+            BetterPartyAdapter.registerAddonSettings();
+            TestSupport.check(
+                    BetterPartyAddonSettings.definition(PartySettingOverrides.KEY_LOOT_RULE).isPresent(),
+                    "re-registration must be idempotent and leave the definition in place");
+
+            var level = helper.getLevel();
+            var source = level.damageSources();
+            var splitOverrides = Map.of(
+                    PartySettingOverrides.KEY_LOOT_RULE, "FREE_FOR_ALL",
+                    PartySettingOverrides.KEY_LOOT_AMOUNT, "SPLIT_EQUALLY");
+            var party = fixedParty(List.of(killer.getUUID(), member.getUUID()), splitOverrides);
+
+            // Items: 3 diamonds split 2/1 although the config says
+            // KILLING_BLOW / OWNER_ONLY.
+            var victimOne = helper.makeMockPlayer(GameType.CREATIVE);
+            var first = new ArrayList<ItemEntity>();
+            first.add(itemAt(level, helper.absolutePos(BlockPos.ZERO), new ItemStack(Items.DIAMOND, 3)));
+            DropEvents.handleLivingDrops(
+                    new LivingDropsEvent(victimOne, source.playerAttack(killer), first, true), party);
+            TestSupport.check(TestSupport.countItem(killer, Items.DIAMOND) == 2,
+                    "the override must split the stack: the killer takes the remainder share, 2 of 3");
+            TestSupport.check(TestSupport.countItem(member, Items.DIAMOND) == 1,
+                    "the override must split the stack: the member takes 1 of 3");
+
+            // Experience rides the same memoized plan: 10 points split 5/5.
+            var xpEvent = new LivingExperienceDropEvent(victimOne, killer, 10);
+            DropEvents.handleLivingXpDrop(xpEvent, party);
+            TestSupport.check(xpEvent.getDroppedExperience() == 0, "the orb amount must be zeroed");
+            TestSupport.check(killer.totalExperience == 5, "the killer's overridden XP share is 5");
+            TestSupport.check(member.totalExperience == 5, "the member's overridden XP share is 5");
+
+            // enabled=false restores solo for that party while the config
+            // still says enabled=true.
+            var optOutOverrides = Map.of(
+                    PartySettingOverrides.KEY_LOOT_RULE, "FREE_FOR_ALL",
+                    PartySettingOverrides.KEY_LOOT_AMOUNT, "SPLIT_EQUALLY",
+                    PartySettingOverrides.KEY_ENABLED, "false");
+            var optOut = fixedParty(List.of(killer.getUUID(), member.getUUID()), optOutOverrides);
+            var victimTwo = helper.makeMockPlayer(GameType.CREATIVE);
+            var second = new ArrayList<ItemEntity>();
+            second.add(itemAt(level, helper.absolutePos(BlockPos.ZERO), new ItemStack(Items.DIAMOND, 4)));
+            DropEvents.handleLivingDrops(
+                    new LivingDropsEvent(victimTwo, source.playerAttack(killer), second, true), optOut);
+            TestSupport.check(TestSupport.countItem(killer, Items.DIAMOND) == 6,
+                    "an enabled=false override collapses the kill to solo: the killer takes all 4");
+            TestSupport.check(TestSupport.countItem(member, Items.DIAMOND) == 1,
+                    "an enabled=false override leaves the member's earlier share untouched");
+
+            // The global switch is the master: off server-side, no override
+            // opts the party back in.
+            config.partyEnabled.set(false);
+            var victimThree = helper.makeMockPlayer(GameType.CREATIVE);
+            var third = new ArrayList<ItemEntity>();
+            third.add(itemAt(level, helper.absolutePos(BlockPos.ZERO), new ItemStack(Items.DIAMOND, 5)));
+            DropEvents.handleLivingDrops(
+                    new LivingDropsEvent(victimThree, source.playerAttack(killer), third, true), party);
+            TestSupport.check(TestSupport.countItem(killer, Items.DIAMOND) == 11,
+                    "party.enabled=false is the master switch: the killer still takes everything");
+            TestSupport.check(TestSupport.countItem(member, Items.DIAMOND) == 1,
+                    "the member receives nothing while party loot is off server-side");
+        } finally {
+            config.partyEnabled.set(wasEnabled);
+        }
+        helper.succeed();
+    }
+
+    /**
+     * FTB Teams' registered team properties carry the same overrides (issue
+     * #21): a fresh party's property collection holds all three, an untouched
+     * team reports the inherit sentinel (absent from the override map, so the
+     * server config wins), and explicit choices ride through the adapter into
+     * the parser.
+     */
+    @GameTest(template = "empty")
+    public static void ftbTeamSettingsRoundTrip(GameTestHelper helper) {
+        ServerPlayer killer = TestSupport.join(helper, "ftb-ovr-killer");
+        var server = helper.getLevel().getServer();
+        try {
+            var api = FTBTeamsAPI.api();
+            TestSupport.check(api.isManagerLoaded(), "the FTB Teams manager must be loaded");
+            var team = api.getManager().createPartyTeam(killer, "ql-ftb-ovr", "", Color4I.WHITE);
+
+            var collected = new HashSet<String>();
+            team.getProperties().forEach((property, value) -> collected.add(property.getId().toString()));
+            TestSupport.check(collected.contains("quick_loot:enabled")
+                            && collected.contains("quick_loot:loot_rule")
+                            && collected.contains("quick_loot:loot_amount"),
+                    "the fresh team's property collection must hold all three registered properties");
+
+            Map<String, String> untouched = FtbTeamsAdapter.INSTANCE.settingOverrides(server, team.getId());
+            TestSupport.check(!untouched.containsKey(PartySettingOverrides.KEY_LOOT_RULE)
+                            && !untouched.containsKey(PartySettingOverrides.KEY_LOOT_AMOUNT),
+                    "an untouched team reports the inherit sentinel: no rule or amount override");
+            TestSupport.check("true".equals(untouched.get(PartySettingOverrides.KEY_ENABLED)),
+                    "the switch surfaces its default");
+            TestSupport.check(
+                    PartySettingOverrides.lootRule(untouched, PartyRule.ROUND_ROBIN) == PartyRule.ROUND_ROBIN,
+                    "the server config wins while the team never chose");
+
+            team.setProperty(FtbTeamsAdapter.LOOT_RULE_PROPERTY, "FREE_FOR_ALL");
+            team.setProperty(FtbTeamsAdapter.LOOT_AMOUNT_PROPERTY, "SPLIT_EQUALLY");
+            Map<String, String> chosen = FtbTeamsAdapter.INSTANCE.settingOverrides(server, team.getId());
+            TestSupport.check(
+                    PartySettingOverrides.lootRule(chosen, PartyRule.KILLING_BLOW) == PartyRule.FREE_FOR_ALL,
+                    "an explicit rule choice overrides the config fallback");
+            TestSupport.check(
+                    PartySettingOverrides.lootAmount(chosen, PartyAmount.OWNER_ONLY) == PartyAmount.SPLIT_EQUALLY,
+                    "an explicit amount choice overrides the config fallback");
+
+            TestSupport.check(
+                    FtbTeamsAdapter.INSTANCE.settingOverrides(server, UUID.randomUUID()).isEmpty(),
+                    "an unknown party id reads as no overrides");
+        } catch (CommandSyntaxException cannotCreateParty) {
+            throw new IllegalStateException("the FTB Teams test party could not be created", cannotCreateParty);
+        }
+        helper.succeed();
+    }
+
     /** The notification payload round-trips stacks and experience through its stream codec. */
     @GameTest(template = "empty")
     public static void insertedPayloadRoundTrips(GameTestHelper helper) {
@@ -533,6 +690,14 @@ public final class QuickLootGameTests {
 
     /** A fabricated membership source over raw ids, for parties with offline members. */
     private static PartyBridge fixedParty(List<UUID> ids) {
+        return fixedParty(ids, Map.of());
+    }
+
+    /**
+     * The same source with addon-setting overrides (issue #21): only the
+     * bridge's own party id answers, exactly like a real settings system.
+     */
+    private static PartyBridge fixedParty(List<UUID> ids, Map<String, String> overrides) {
         UUID partyId = UUID.randomUUID();
         return new PartyBridge() {
             @Override
@@ -543,6 +708,11 @@ public final class QuickLootGameTests {
             @Override
             public Optional<ResolvedParty> resolve(MinecraftServer server, UUID player) {
                 return ids.contains(player) ? Optional.of(new ResolvedParty(partyId, ids)) : Optional.empty();
+            }
+
+            @Override
+            public Map<String, String> settingOverrides(MinecraftServer server, UUID id) {
+                return id.equals(partyId) ? overrides : Map.of();
             }
         };
     }
