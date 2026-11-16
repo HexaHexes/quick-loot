@@ -50,6 +50,14 @@ amount, both set in server config (`party.lootRule`, `party.lootAmount`). At
 the defaults the feature is inert: the killer keeps everything, exactly like
 solo play.
 
+With Better Party or FTB Teams installed, each party can override these
+values for itself: Better Party's party settings menu gains a "Quick: Loot!"
+page (the switch, the rule and the amount as cycle buttons), and FTB Teams'
+team settings gain the same three properties with "Use Server Config" as
+the starting choice. The server config stays both the fallback for parties
+that have not chosen and the master switch: `party.enabled=false` is never
+overridden upward, while a party can turn sharing off for itself.
+
 | Rule \ Amount | `OWNER_ONLY` (default) | `FULL_TO_ALL` | `SPLIT_EQUALLY` |
 |---|---|---|---|
 | `KILLING_BLOW` (default), killer only | the killer gets the whole stack | the killer gets the whole stack (the only recipient) | the killer gets the whole stack (the only recipient) |
@@ -86,6 +94,9 @@ in-game with Configured installed.
 
 Turning `drops.coinsToWallet` off leaves coins as ordinary items, and setting
 `party.lootRule` back to `KILLING_BLOW` returns every kill to solo behaviour.
+The `party.*` values are the server defaults behind each party's own
+overrides (see the party loot section above); Open Parties and Claims
+parties have no override source and always follow the server config.
 
 ## Dependencies
 
