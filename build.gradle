@@ -193,7 +193,7 @@ tasks.matching { it.name == 'runGameTestServer' }.configureEach {
     // with a fresh world (delete run/world) to roll a new position.
     timeout = java.time.Duration.ofMinutes(10)
 
-    def expectedTests = 27
+    def expectedTests = 28
     doLast {
         def log = file('run/logs/latest.log')
         if (!log.exists()) {

@@ -19,6 +19,9 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
@@ -30,6 +33,7 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.event.level.BlockDropsEvent;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -123,6 +127,65 @@ public final class QuickLootGameTests {
             TestSupport.check(miner.totalExperience == 0, "gates off: no direct award");
         } finally {
             config.enabled.set(wasEnabled);
+        }
+        helper.succeed();
+    }
+
+    /**
+     * Corpse harvest drops insert (issue #23): a recorded right-click followed
+     * by a same-tick item spawn at the corpse lands in the harvester's
+     * inventory and the ground item never joins the world; with
+     * {@code corpseHarvest} off, or {@code mobDrops} off (the AND gate), the
+     * spawn stays in the world exactly like vanilla. Both events ride the
+     * real bus, so registration is proven alongside the behaviour.
+     */
+    @GameTest(template = "empty")
+    public static void corpseHarvestInsertsSameTickSpawns(GameTestHelper helper) {
+        ServerPlayer harvester = TestSupport.join(helper, "harvester");
+        ServerLevel level = helper.getLevel();
+        Entity corpse = helper.spawn(EntityType.ARMOR_STAND, new BlockPos(2, 0, 2));
+        var config = QuickLootConfig.SERVER;
+        boolean wasEnabled = config.enabled.get();
+        boolean wasMob = config.mobDrops.get();
+        boolean wasHarvest = config.corpseHarvest.get();
+        try {
+            config.enabled.set(true);
+            config.mobDrops.set(true);
+            config.corpseHarvest.set(true);
+
+            NeoForge.EVENT_BUS.post(new PlayerInteractEvent.EntityInteract(
+                    harvester, InteractionHand.MAIN_HAND, corpse));
+            level.addFreshEntity(new ItemEntity(level, corpse.getX(), corpse.getY(), corpse.getZ(),
+                    new ItemStack(Items.IRON_INGOT, 3)));
+            TestSupport.check(TestSupport.countItem(harvester, Items.IRON_INGOT) == 3,
+                    "the harvest spawn must be inserted, not dropped");
+            TestSupport.check(TestSupport.entitiesNear(helper, ItemEntity.class).isEmpty(),
+                    "the absorbed item must never join the world");
+
+            config.corpseHarvest.set(false);
+            NeoForge.EVENT_BUS.post(new PlayerInteractEvent.EntityInteract(
+                    harvester, InteractionHand.MAIN_HAND, corpse));
+            level.addFreshEntity(new ItemEntity(level, corpse.getX(), corpse.getY(), corpse.getZ(),
+                    new ItemStack(Items.GOLD_INGOT, 2)));
+            TestSupport.check(TestSupport.countItem(harvester, Items.GOLD_INGOT) == 0,
+                    "corpseHarvest off: nothing may be inserted");
+            TestSupport.check(!TestSupport.entitiesNear(helper, ItemEntity.class).isEmpty(),
+                    "corpseHarvest off: the item must drop in the world like vanilla");
+
+            config.corpseHarvest.set(true);
+            config.mobDrops.set(false);
+            NeoForge.EVENT_BUS.post(new PlayerInteractEvent.EntityInteract(
+                    harvester, InteractionHand.MAIN_HAND, corpse));
+            level.addFreshEntity(new ItemEntity(level, corpse.getX(), corpse.getY(), corpse.getZ(),
+                    new ItemStack(Items.COBBLESTONE, 4)));
+            TestSupport.check(TestSupport.countItem(harvester, Items.COBBLESTONE) == 0,
+                    "mobDrops off: the AND gate must block the scoop");
+            TestSupport.check(!TestSupport.entitiesNear(helper, ItemEntity.class).isEmpty(),
+                    "mobDrops off: the item must drop in the world like vanilla");
+        } finally {
+            config.enabled.set(wasEnabled);
+            config.mobDrops.set(wasMob);
+            config.corpseHarvest.set(wasHarvest);
         }
         helper.succeed();
     }
