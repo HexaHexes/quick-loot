@@ -9,6 +9,8 @@ import java.util.UUID;
 import java.util.WeakHashMap;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
@@ -18,8 +20,10 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
 import net.neoforged.neoforge.event.entity.living.LivingExperienceDropEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 import net.neoforged.neoforge.event.level.BlockDropsEvent;
 import org.bitwisemadness.quickloot.QuickLoot;
 import org.bitwisemadness.quickloot.compat.LightmansCurrencyIntegration;
@@ -79,6 +83,24 @@ public final class DropEvents {
 
     private record ResolvedKill(UUID killer, Distribution distribution) {
     }
+
+    /**
+     * Corpse interactions awaiting this tick's harvest spawns, keyed weakly by
+     * the interacted entity so the entry dies with the corpse (issue #23).
+     * Written entries carry their tick; a stale tick can never absorb, and the
+     * sweep on the next write bounds the map without a tick handler.
+     */
+    private static final Map<Entity, PendingHarvest> PENDING_HARVESTS = new WeakHashMap<>();
+
+    private record PendingHarvest(ServerPlayer player, long time) {
+    }
+
+    /**
+     * Set while a harvest distribution runs: its overflow spawns re-enter this
+     * handler in the same call stack and must pass through to the world as the
+     * ground fallback they are, never be re-absorbed.
+     */
+    private static boolean scooping;
 
     private DropEvents() {
     }
@@ -226,6 +248,88 @@ public final class DropEvents {
             }
         }
         return fresh;
+    }
+
+    /**
+     * Records a main-hand right-click on a living entity for the harvest
+     * spawns of the same tick - Ice and Fire's corpse ladder and any mod that
+     * spawns harvest items on the spot (issue #23). Server side only; the
+     * items spawn inside the interaction that follows this event.
+     */
+    @SubscribeEvent
+    public static void onEntityInteract(PlayerInteractEvent.EntityInteract event) {
+        if (event.getHand() != InteractionHand.MAIN_HAND
+                || !(event.getEntity() instanceof ServerPlayer player)) {
+            return;
+        }
+        recordHarvestInteraction(player, event.getTarget(), event.getLevel().getGameTime());
+    }
+
+    /** Remembers the interaction; the join handler spends it. Gated like the coin scoop. */
+    private static void recordHarvestInteraction(ServerPlayer player, Entity target, long time) {
+        QuickLootConfig.Server config = QuickLootConfig.SERVER;
+        if (!config.enabled.get() || !config.mobDrops.get() || !config.corpseHarvest.get()
+                || !(target instanceof LivingEntity)) {
+            return;
+        }
+        PENDING_HARVESTS.values().removeIf(pending -> pending.time() < time);
+        PENDING_HARVESTS.put(target, new PendingHarvest(player, time));
+    }
+
+    /**
+     * Scoops an item spawned at a recorded corpse during the same tick into
+     * the harvester's distribution, mirroring {@link #collectFreshCoins}:
+     * fully absorbed items never join the world, a partial absorption joins
+     * with the leftover count, and the distribution's own overflow spawns
+     * pass through behind the {@link #scooping} guard to land on the ground.
+     * Never widened past same-tick spawns at the corpse, or it starts taking
+     * ground drops that belong to vanilla pickup.
+     */
+    @SubscribeEvent
+    public static void onEntityJoin(EntityJoinLevelEvent event) {
+        QuickLootConfig.Server config = QuickLootConfig.SERVER;
+        if (!config.enabled.get() || !config.mobDrops.get() || !config.corpseHarvest.get()
+                || scooping || PENDING_HARVESTS.isEmpty()
+                || !(event.getEntity() instanceof ItemEntity item)
+                || !(event.getLevel() instanceof ServerLevel level)
+                || item.getAge() != 0) {
+            return;
+        }
+        long now = level.getGameTime();
+        for (Map.Entry<Entity, PendingHarvest> entry : PENDING_HARVESTS.entrySet()) {
+            PendingHarvest pending = entry.getValue();
+            AABB atCorpse = new AABB(entry.getKey().position(), entry.getKey().position()).inflate(2.0);
+            if (pending.time() != now || !atCorpse.contains(item.position())) {
+                continue;
+            }
+            Distribution distribution = distributionFor(
+                    (LivingEntity) entry.getKey(), pending.player(), level, PartyBridgeRegistry.current());
+            Map<UUID, List<ItemStack>> notifications = new LinkedHashMap<>();
+            for (UUID id : distribution.recipients()) {
+                notifications.put(id, new ArrayList<>());
+            }
+            ItemStack leftover;
+            scooping = true;
+            try {
+                leftover = distributeStack(
+                        distribution, level, distribution.amount(), notifications,
+                        item.position(), item.getItem());
+            } finally {
+                scooping = false;
+            }
+            if (leftover.isEmpty()) {
+                event.setCanceled(true);
+            } else if (leftover.getCount() != item.getItem().getCount()) {
+                item.setItem(leftover);
+            }
+            notifications.forEach((id, stacks) -> {
+                ServerPlayer recipient = level.getServer().getPlayerList().getPlayer(id);
+                if (recipient != null) {
+                    InsertNotifier.send(recipient, stacks);
+                }
+            });
+            return;
+        }
     }
 
     @SubscribeEvent

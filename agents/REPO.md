@@ -30,8 +30,8 @@ wallet insert.
   types - and nothing else may.
 
 **Test:** `./gradlew runGameTestServer` — `QuickLootGameTests` +
-`LightmansCurrencyGameTests` + `SophisticatedBackpackGameTests` (27 tests).
-`expectedTests = 27` in `build.gradle`
+`LightmansCurrencyGameTests` + `SophisticatedBackpackGameTests` (28 tests).
+`expectedTests = 28` in `build.gradle`
 must match the `@GameTest` count. JUnit (`src/test`) covers the pure party
 matrix and the override parser; GameTests cover everything that needs a
 live server.

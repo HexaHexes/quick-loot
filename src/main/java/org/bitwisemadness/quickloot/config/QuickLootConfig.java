@@ -34,6 +34,7 @@ public final class QuickLootConfig {
         public final ModConfigSpec.BooleanValue mobExperience;
         public final ModConfigSpec.BooleanValue blockExperience;
         public final ModConfigSpec.BooleanValue lightmansCoins;
+        public final ModConfigSpec.BooleanValue corpseHarvest;
         public final ModConfigSpec.BooleanValue useBackpacks;
         public final ModConfigSpec.BooleanValue coinsToWallet;
         public final ModConfigSpec.BooleanValue lootJournalNotify;
@@ -62,6 +63,9 @@ public final class QuickLootConfig {
             lightmansCoins = builder.comment(
                     "Collect Lightman's Currency coins spawned at a mob's death into the insert pipeline (requires Lightman's Currency; also needs drops.enabled and drops.mobDrops). With this off the coins stay on the ground like any other drop.")
                     .define("lightmansCoins", true);
+            corpseHarvest = builder.comment(
+                    "Insert items spawned during a right-click corpse harvest (Ice and Fire dragon remains, and other corpses whose harvest drops spawn on the spot) into the harvester's inventory (also needs drops.enabled and drops.mobDrops). With this off the harvest drops stay on the ground.")
+                    .define("corpseHarvest", true);
             useBackpacks = builder.comment(
                     "Run inserted loot through the pickup-response chain of carried Sophisticated Backpacks before the inventory: a Pickup, Advanced Pickup, Magnet or Advanced Magnet upgrade decides what its backpack claims (its filter and settings apply), a backpack without one of those upgrades receives nothing, and with this off backpacks are not consulted at all.")
                     .define("useBackpacks", true);
