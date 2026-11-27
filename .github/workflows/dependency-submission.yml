@@ -9,7 +9,7 @@ name: Dependency submission
 
 on:
   push:
-    branches: [ 'neoforge-*' ]   # loader-line branches (org rule); no main/master
+    branches: [ 'neoforge-*', 'forge-*' ]   # every loader line (org rule: list each pattern, #114); no main/master
   pull_request:
 
 permissions:

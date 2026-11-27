@@ -36,8 +36,10 @@ name: Version bump (post-merge)
 on:
   push:
     # Loader-line branches only (org rule): one branch per supported
-    # loader/version; there is no main/master.
-    branches: [ 'neoforge-*' ]
+    # loader/version; there is no main/master. Every supported loader
+    # pattern is listed so this file stays byte-identical across lines
+    # (issue #114) - add yours here.
+    branches: [ 'neoforge-*', 'forge-*' ]
     paths-ignore:
       - '.github/**'
   # Manual retry for a failed bump: dispatch instead of waiting for the next
