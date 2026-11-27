@@ -1,7 +1,7 @@
 name: Release
 
-# Runs on pushes to loader-line branches (neoforge-<mc version> - one branch per
-# supported loader and Minecraft version, the org rule in agents/AGENTS.md):
+# Runs on pushes to loader-line branches (<loader_id>-<mc version> - one branch
+# per supported loader and Minecraft version, the org rule in agents/AGENTS.md):
 # when gradle.properties carries a version that has no matching
 # <loader line>-<version> release yet, build the jar and publish it as a GitHub
 # release for that tag. Everything the mod ships rides inside that jar, so there
@@ -29,8 +29,11 @@ on:
   push:
     branches:
       # One branch per supported loader/version (org rule): every loader line
-      # releases itself, tagged with its own line. There is no main.
+      # releases itself, tagged with its own line. There is no main. Every
+      # supported loader pattern is listed so this file stays byte-identical
+      # across lines (issue #114) - add yours here.
       - 'neoforge-*'
+      - 'forge-*'
   # Retry entry for the post-merge version bump: the bump pushes with a PAT
   # whose push cascades into this workflow, so Release normally fires from the
   # bump itself - dispatch here to re-run a Release that failed (e.g. an auth
@@ -79,9 +82,9 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
           # The loader line mirrors archivesName in build.gradle
-          # (neoforge-<mc_version>); tag and jar both hang off it, so branch,
-          # tag and jar name cannot drift apart.
-          LOADER_LINE="neoforge-$(grep '^minecraft_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')"
+          # (<loader_id>-<mc_version>); tag and jar both hang off it, so
+          # branch, tag and jar name cannot drift apart.
+          LOADER_LINE="$(grep '^loader_id=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')-$(grep '^minecraft_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]')"
           TAG="$LOADER_LINE-$VERSION"
           echo "loader line: $LOADER_LINE"
           echo "tag: $TAG"

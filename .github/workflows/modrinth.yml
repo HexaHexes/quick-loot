@@ -39,11 +39,7 @@ jobs:
     name: publish
     runs-on: ubuntu-latest
 
-    # Edit these two lines when promoting this file into a repo. Loader names
-    # are Modrinth's lowercase names ("neoforge", "forge").
     env:
-      MINECRAFT_VERSION: '1.21.1'
-      MOD_LOADERS: '["neoforge"]'
       GH_TOKEN: ${{ github.token }}
       # Either the release event or the dispatch input, never both.
       RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
@@ -129,6 +125,34 @@ jobs:
           echo "Secrets present."
           echo "configured=true" >> "$GITHUB_OUTPUT"
 
+      # Only the publish path reads the tree - the skip and unconfigured paths
+      # above must never depend on the tag's contents. Checkout is AT the tag
+      # being published so the metadata describes the artifact itself.
+      - uses: actions/checkout@v7
+        if: steps.channel.outputs.publish == 'true' && steps.config.outputs.configured == 'true'
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+
+      # Game version and loader derive from gradle.properties (loader_id +
+      # minecraft_version, #112) like every other loader value - promoting
+      # this file into a line or repo needs no edits, and loader_id's values
+      # are already Modrinth's lowercase forms ("neoforge", "forge").
+      - name: Derive the platform metadata
+        id: platform
+        if: steps.channel.outputs.publish == 'true' && steps.config.outputs.configured == 'true'
+        run: |
+          set -euo pipefail
+          MINECRAFT_VERSION=$(grep '^minecraft_version=' gradle.properties | cut -d= -f2 | tr -d '[:space:]' || true)
+          LOADER_ID=$(grep '^loader_id=' gradle.properties | cut -d= -f2 | tr -d '[:space:]' || true)
+          if [ -z "$MINECRAFT_VERSION" ] || [ -z "$LOADER_ID" ]; then
+            echo "::error::gradle.properties at $RELEASE_TAG must define minecraft_version and loader_id (neoforge-mod-template #112); this tag predates the key."
+            exit 1
+          fi
+          echo "minecraft version: $MINECRAFT_VERSION"
+          echo "loader: $LOADER_ID"
+          echo "minecraft_version=$MINECRAFT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "mod_loaders=[\"$LOADER_ID\"]" >> "$GITHUB_OUTPUT"
+
       # Both the asset and the notes are read back from the published release
       # rather than taken from the event payload, so this works identically
       # whether it was triggered by the release event or by a dispatch. The jar
@@ -164,6 +188,6 @@ jobs:
           version-type: ${{ steps.channel.outputs.version_type }}
           name: ${{ env.RELEASE_TAG }}
           changelog-file: notes.md
-          game-versions: ${{ env.MINECRAFT_VERSION }}
-          loaders: ${{ env.MOD_LOADERS }}
+          game-versions: ${{ steps.platform.outputs.minecraft_version }}
+          loaders: ${{ steps.platform.outputs.mod_loaders }}
           modrinth-featured: false

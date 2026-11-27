@@ -12,7 +12,7 @@ name: CodeQL
 on:
   pull_request:
   push:
-    branches: [ 'neoforge-*' ]   # loader-line branches (org rule); no main/master
+    branches: [ 'neoforge-*', 'forge-*' ]   # every loader line (org rule: list each pattern, #114); no main/master
   schedule:
     - cron: '27 4 * * 1'   # weekly; off-the-hour minute avoids the cron rush
   workflow_dispatch:

@@ -4,6 +4,15 @@ pluginManagement {
     }
 }
 
+// Toolchain provisioning: the build's java.toolchain may target a level the
+// runner does not have installed (a forge-1.20.1 line compiles on 17 while
+// setup-java installs 21 everywhere) - foojay downloads it on demand instead
+// of failing (issue #114). Inert when the toolchain is already present.
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
 // Keep in sync with mod_id in gradle.properties. archivesName in build.gradle
-// extends mod_id with the loader line; rootProject.name stays the plain mod id.
+// extends mod_id with the loader line (loader_id + minecraft_version);
+// rootProject.name stays the plain mod id.
 rootProject.name = 'quick_loot'
